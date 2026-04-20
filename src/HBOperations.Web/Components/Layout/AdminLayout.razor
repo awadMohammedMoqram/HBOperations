@@ -1,0 +1,21 @@
+@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+
+@* Admin Header *@
+<HBHeader />
+
+@* Main Content *@
+<main class="admin-main-content">
+    <div class="admin-container">
+        @Body
+    </div>
+</main>
+
+@* Footer *@
+<HBFooter />
+
+<div id="blazor-error-ui" data-nosnippet>
+    حدث خطأ غير متوقع في التطبيق.
+    <a href="." class="reload">إعادة التحميل</a>
+    <span class="dismiss">🗙</span>
+</div>

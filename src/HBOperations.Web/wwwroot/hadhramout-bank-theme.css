@@ -1,0 +1,478 @@
+/* ===============================================
+   بنك حضرموت - نظام الألوان والتصميم الرسمي
+   Hadhramout Bank - Official Design System
+   =============================================== */
+
+/* ===== 🎨 المتغيرات الرئيسية (Primary Variables) ===== */
+:root {
+    /* ألوان البنك الرسمية */
+    --hb-primary: #003d7a;          /* الأزرق الداكن - Primary Blue */
+    --hb-primary-light: #00589e;    /* الأزرق الفاتح - Light Blue */
+    --hb-gold: #d4af37;             /* الذهبي - Gold */
+    --hb-gold-dark: #c9a332;        /* الذهبي الداكن - Dark Gold */
+    
+    /* ألوان إضافية */
+    --hb-white: #ffffff;
+    --hb-light-bg: #f8f9fa;
+    --hb-gray-light: #e8e8e8;
+    --hb-gray: #666;
+    --hb-text: #333;
+    
+    /* ظلال وتدرجات */
+    --hb-shadow: 0 10px 30px rgba(0, 61, 122, 0.1);
+    --hb-shadow-hover: 0 15px 40px rgba(0, 61, 122, 0.2);
+    --hb-gradient-primary: linear-gradient(135deg, #003d7a 0%, #00589e 100%);
+    --hb-gradient-gold: linear-gradient(135deg, #d4af37 0%, #c9a332 100%);
+    
+    /* الخطوط */
+    --hb-font-family: 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
+    --hb-font-size-base: 14px;
+    --hb-line-height: 1.8;
+    
+    /* نصف قطر الحواف */
+    --hb-border-radius: 10px;
+    --hb-border-radius-sm: 6px;
+    --hb-border-radius-lg: 15px;
+    
+    /* المسافات */
+    --hb-spacing-sm: 0.5rem;
+    --hb-spacing-md: 1rem;
+    --hb-spacing-lg: 2rem;
+    --hb-spacing-xl: 3rem;
+    
+    /* الانتقالات */
+    --hb-transition: all 0.3s ease;
+}
+
+/* ===== 📦 التنسيقات العامة (General Styles) ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--hb-font-family);
+    font-size: var(--hb-font-size-base);
+    line-height: var(--hb-line-height);
+    color: var(--hb-text);
+    background: #f2f2f2;
+    direction: rtl;
+    text-align: right;
+    min-height: 100vh;
+    position: relative;
+}
+
+/* خلفية منقوشة */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url('Images/main-pattern-sAiPHf0c.svg');
+    background-size: 400px;
+    background-repeat: repeat;
+    opacity: 0.02;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* ===== 🎯 أزرار (Buttons) ===== */
+.btn-hb-primary {
+    background: var(--hb-gradient-primary);
+    color: var(--hb-white);
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: var(--hb-border-radius-sm);
+    font-weight: 600;
+    font-size: 1rem;
+    transition: var(--hb-transition);
+    box-shadow: 0 4px 10px rgba(0, 61, 122, 0.3);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.btn-hb-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 61, 122, 0.4);
+    color: var(--hb-white);
+    opacity: 0.95;
+}
+
+.btn-hb-primary:active {
+    transform: translateY(0);
+}
+
+.btn-hb-gold {
+    background: var(--hb-gradient-gold);
+    color: var(--hb-primary);
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: var(--hb-border-radius-sm);
+    font-weight: 600;
+    font-size: 1rem;
+    transition: var(--hb-transition);
+    box-shadow: 0 4px 10px rgba(212, 175, 55, 0.3);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-decoration: none;
+}
+
+.btn-hb-gold:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(212, 175, 55, 0.4);
+    opacity: 0.95;
+    color: var(--hb-primary);
+    text-decoration: none;
+}
+
+.btn-hb-outline {
+    background: transparent;
+    color: var(--hb-primary);
+    border: 2px solid var(--hb-primary);
+    padding: 0.75rem 2rem;
+    border-radius: var(--hb-border-radius-sm);
+    font-weight: 600;
+    font-size: 1rem;
+    transition: var(--hb-transition);
+    cursor: pointer;
+}
+
+.btn-hb-outline:hover {
+    background: var(--hb-primary);
+    color: var(--hb-white);
+    transform: translateY(-2px);
+}
+
+/* ===== 📝 بطاقات (Cards) ===== */
+.hb-card {
+    background: var(--hb-white);
+    border-radius: var(--hb-border-radius-lg);
+    padding: 2rem;
+    box-shadow: var(--hb-shadow);
+    margin-bottom: 2rem;
+    transition: var(--hb-transition);
+}
+
+.hb-card:hover {
+    box-shadow: var(--hb-shadow-hover);
+    transform: translateY(-3px);
+}
+
+.hb-card-header {
+    border-bottom: 3px solid var(--hb-gold);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.hb-card-title {
+    color: var(--hb-primary);
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.hb-card-subtitle {
+    color: var(--hb-gray);
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
+}
+
+/* ===== 📊 جدول (Tables) ===== */
+.hb-table {
+    width: 100%;
+    background: var(--hb-white);
+    border-radius: var(--hb-border-radius);
+    overflow: hidden;
+    box-shadow: var(--hb-shadow);
+}
+
+.hb-table thead {
+    background: var(--hb-gradient-primary);
+    color: var(--hb-white);
+}
+
+.hb-table thead th {
+    padding: 1rem;
+    font-weight: 600;
+    text-align: right;
+    border: none;
+}
+
+.hb-table tbody tr {
+    transition: var(--hb-transition);
+    border-bottom: 1px solid var(--hb-gray-light);
+}
+
+.hb-table tbody tr:hover {
+    background-color: rgba(0, 61, 122, 0.05);
+}
+
+.hb-table tbody td {
+    padding: 1rem;
+    text-align: right;
+    vertical-align: middle;
+}
+
+.hb-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+/* ===== 📋 نماذج (Forms) ===== */
+.hb-form-group {
+    margin-bottom: 1.5rem;
+}
+
+.hb-form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--hb-primary);
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.hb-form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--hb-gray-light);
+    border-radius: var(--hb-border-radius-sm);
+    font-size: 1rem;
+    font-family: var(--hb-font-family);
+    transition: var(--hb-transition);
+    background-color: var(--hb-white);
+}
+
+.hb-form-control:focus {
+    outline: none;
+    border-color: var(--hb-primary);
+    box-shadow: 0 0 0 3px rgba(0, 61, 122, 0.1);
+}
+
+.hb-form-control.invalid,
+.hb-form-control:invalid {
+    border-color: #e50000;
+}
+
+.hb-form-control.valid {
+    border-color: #26b050;
+}
+
+.validation-message {
+    color: #e50000;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+    display: block;
+}
+
+/* ===== 🏷️ شارات (Badges) ===== */
+.hb-badge {
+    display: inline-block;
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.hb-badge-primary {
+    background-color: var(--hb-primary);
+    color: var(--hb-white);
+}
+
+.hb-badge-gold {
+    background-color: var(--hb-gold);
+    color: var(--hb-primary);
+}
+
+.hb-badge-success {
+    background-color: #26b050;
+    color: var(--hb-white);
+}
+
+.hb-badge-danger {
+    background-color: #e50000;
+    color: var(--hb-white);
+}
+
+.hb-badge-warning {
+    background-color: #ffa500;
+    color: var(--hb-white);
+}
+
+.hb-badge-secondary {
+    background-color: var(--hb-gray);
+    color: var(--hb-white);
+}
+
+/* ===== 💡 تنبيهات (Alerts) ===== */
+.hb-alert {
+    padding: 1rem 1.5rem;
+    border-radius: var(--hb-border-radius-sm);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.hb-alert-success {
+    background: linear-gradient(135deg, #d1e7dd 0%, #badbcc 100%);
+    border-right: 4px solid #26b050;
+    color: #0f5132;
+}
+
+.hb-alert-danger {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c2c7 100%);
+    border-right: 4px solid #e50000;
+    color: #842029;
+}
+
+.hb-alert-warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+    border-right: 4px solid #ffa500;
+    color: #664d03;
+}
+
+.hb-alert-info {
+    background: linear-gradient(135deg, #cfe2ff 0%, #b6d4fe 100%);
+    border-right: 4px solid var(--hb-primary);
+    color: #084298;
+}
+
+/* ===== 📌 عناوين (Headings) ===== */
+.hb-page-title {
+    color: var(--hb-primary);
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-align: center;
+    padding-bottom: 1rem;
+    border-bottom: 3px solid var(--hb-gold);
+}
+
+.hb-section-title {
+    color: var(--hb-primary);
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    padding-right: 1rem;
+    border-right: 4px solid var(--hb-gold);
+    display: inline-block;
+}
+
+/* ===== ⏳ تحميل (Loading) ===== */
+.hb-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    gap: 1rem;
+}
+
+.hb-spinner {
+    width: 3rem;
+    height: 3rem;
+    border: 4px solid var(--hb-gray-light);
+    border-top-color: var(--hb-primary);
+    border-radius: 50%;
+    animation: hb-spin 0.8s linear infinite;
+}
+
+@keyframes hb-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ===== 🌐 متجاوب (Responsive) ===== */
+@media (max-width: 768px) {
+    :root {
+        --hb-font-size-base: 13px;
+    }
+    
+    .hb-page-title {
+        font-size: 1.8rem;
+    }
+    
+    .hb-section-title {
+        font-size: 1.4rem;
+    }
+    
+    .hb-card {
+        padding: 1.5rem;
+    }
+    
+    .btn-hb-primary,
+    .btn-hb-gold,
+    .btn-hb-outline {
+        padding: 0.65rem 1.5rem;
+        font-size: 0.95rem;
+    }
+}
+
+@media (max-width: 480px) {
+    :root {
+        --hb-font-size-base: 12px;
+    }
+    
+    .hb-card {
+        padding: 1rem;
+        border-radius: var(--hb-border-radius);
+    }
+    
+    .hb-page-title {
+        font-size: 1.5rem;
+    }
+    
+    .hb-section-title {
+        font-size: 1.2rem;
+    }
+}
+
+/* ===== ✨ أنيميشن إضافية ===== */
+@keyframes hb-fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.hb-fade-in {
+    animation: hb-fadeIn 0.5s ease-out;
+}
+
+/* ===== 🎨 Utilities ===== */
+.hb-text-primary { color: var(--hb-primary) !important; }
+.hb-text-gold { color: var(--hb-gold) !important; }
+.hb-bg-primary { background-color: var(--hb-primary) !important; }
+.hb-bg-gold { background-color: var(--hb-gold) !important; }
+.hb-bg-light { background-color: var(--hb-light-bg) !important; }
+
+.hb-text-center { text-align: center !important; }
+.hb-text-right { text-align: right !important; }
+.hb-text-left { text-align: left !important; }
+
+.hb-mt-1 { margin-top: var(--hb-spacing-sm) !important; }
+.hb-mt-2 { margin-top: var(--hb-spacing-md) !important; }
+.hb-mt-3 { margin-top: var(--hb-spacing-lg) !important; }
+.hb-mt-4 { margin-top: var(--hb-spacing-xl) !important; }
+
+.hb-mb-1 { margin-bottom: var(--hb-spacing-sm) !important; }
+.hb-mb-2 { margin-bottom: var(--hb-spacing-md) !important; }
+.hb-mb-3 { margin-bottom: var(--hb-spacing-lg) !important; }
+.hb-mb-4 { margin-bottom: var(--hb-spacing-xl) !important; }
+
+.hb-p-1 { padding: var(--hb-spacing-sm) !important; }
+.hb-p-2 { padding: var(--hb-spacing-md) !important; }
+.hb-p-3 { padding: var(--hb-spacing-lg) !important; }
+.hb-p-4 { padding: var(--hb-spacing-xl) !important; }

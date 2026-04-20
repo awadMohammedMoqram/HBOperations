@@ -1,0 +1,154 @@
+/* ========================================
+   Footer Component - Matching Original Bank Design
+   ======================================== */
+
+.footer {
+    background: linear-gradient(180deg, #1a1a1a 0%, #2d2d2d 100%);
+    color: white;
+    padding: 3rem 0 1rem;
+    position: relative;
+    overflow: hidden;
+    border-top: 3px solid #d4af37;
+}
+
+.footer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url('Images/main-pattern-sAiPHf0c.svg');
+    background-size: cover;
+    background-position: center;
+    opacity: 0.02;
+    z-index: 0;
+}
+
+.footer-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    position: relative;
+    z-index: 1;
+}
+
+.footer-top {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+
+.footer-section h4 {
+    color: #d4af37;
+    font-size: 1.3rem;
+    margin-bottom: 1.2rem;
+    font-weight: 700;
+}
+
+.footer-logo {
+    width: 80px;
+    height: 80px;
+    background: white;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 20px rgba(212, 175, 55, 0.3);
+    border: 2px solid rgba(212, 175, 55, 0.2);
+}
+
+.footer-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.social-links {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.social-link {
+    width: 40px;
+    height: 40px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    padding: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    min-height: auto;
+    min-width: auto;
+}
+
+.social-link:hover {
+    background: rgba(212, 175, 55, 0.2);
+    transform: translateY(-3px);
+    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
+    border-color: #d4af37;
+}
+
+.social-link img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.contact-section .no-bullets li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.contact-section .no-bullets li:last-child {
+    margin-bottom: 0;
+}
+
+.contact-section .no-bullets li i {
+    color: #d4af37;
+    font-size: 1.1rem;
+    width: 1.25rem;
+    flex-shrink: 0;
+}
+
+.contact-section .no-bullets a,
+.contact-section .no-bullets span {
+    color: rgba(255,255,255,0.9);
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+.contact-section .no-bullets a:hover {
+    color: #d4af37;
+}
+
+.footer-bottom {
+    padding-top: 1.5rem;
+    text-align: center;
+}
+
+.footer-bottom p {
+    color: rgba(255,255,255,0.6);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+@media (max-width: 768px) {
+    .footer-top {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+    .footer-section.contact-section {
+        margin-right: 0 !important;
+        justify-self: start !important;
+    }
+}

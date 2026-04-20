@@ -1,0 +1,410 @@
+/* ========================================
+   🎨 Admin Pages - Shared Styles
+   ======================================== */
+
+/* 📌 Page Title Section */
+.page-title-section {
+    margin-bottom: 2rem;
+}
+
+.title-with-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.section-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #003d7a;
+    margin: 0 0 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.section-title i {
+    color: #d4af37;
+    font-size: 1.5rem;
+}
+
+.section-subtitle {
+    color: #6c757d;
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+/* 🎯 Common Button Styles */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.5rem;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: none;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #34ce57 100%);
+    color: white;
+}
+
+.btn-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+}
+
+/* 📱 Responsive */
+@media (max-width: 768px) {
+    .section-title {
+        font-size: 1.5rem;
+    }
+
+    .title-with-action {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .title-with-action .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 576px) {
+    .section-title {
+        font-size: 1.25rem;
+    }
+
+    .section-title i {
+        font-size: 1.25rem;
+    }
+
+    .section-subtitle {
+        font-size: 0.85rem;
+    }
+}
+
+/* ========================================
+   🔐 Force Logout Dialog
+   ======================================== */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 1rem;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.force-logout-dialog {
+    background: white;
+    border-radius: 20px;
+    max-width: 600px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.force-logout-dialog .modal-header {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    padding: 1.5rem 2rem;
+    border-radius: 20px 20px 0 0;
+    text-align: center;
+}
+
+.force-logout-dialog .modal-header h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.force-logout-dialog .modal-body {
+    padding: 2rem;
+}
+
+.warning-message {
+    font-size: 1.1rem;
+    color: #495057;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.session-info {
+    background: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-radius: 15px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.session-info h4 {
+    color: #003d7a;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+.session-details {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.session-details li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.95rem;
+}
+
+.session-details li:last-child {
+    border-bottom: none;
+}
+
+.session-details li i {
+    color: #d4af37;
+    font-size: 1.1rem;
+    width: 20px;
+}
+
+.session-details li strong {
+    color: #495057;
+    min-width: 120px;
+}
+
+.warning-note {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 10px;
+    padding: 1rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.warning-note i {
+    color: #856404;
+    font-size: 1.2rem;
+    margin-top: 2px;
+}
+
+.warning-note p {
+    color: #856404;
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.force-logout-dialog .modal-footer {
+    padding: 1.5rem 2rem;
+    border-top: 2px solid #e9ecef;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.force-logout-dialog .modal-footer .btn {
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.force-logout-dialog .modal-footer .btn-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border: none;
+}
+
+.force-logout-dialog .modal-footer .btn-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+}
+
+.force-logout-dialog .modal-footer .btn-secondary {
+    background: #6c757d;
+    color: white;
+    border: none;
+}
+
+.force-logout-dialog .modal-footer .btn-secondary:hover {
+    background: #5a6268;
+    transform: translateY(-2px);
+}
+
+/* ============================================
+   📱 Global Responsive Enhancements
+   ============================================ */
+
+/* Smooth Scrolling */
+* {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Touch Target Size (min 44x44px for accessibility) */
+button,
+.btn,
+a,
+input[type="checkbox"],
+input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+}
+
+/* Better Touch Feedback */
+button:active,
+.btn:active {
+    transform: scale(0.98);
+}
+
+/* Prevent Text Selection on Double Tap */
+.btn,
+button {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Tablet Landscape (1024px and down) */
+@media (max-width: 1024px) {
+    .title-with-action {
+        gap: 1rem;
+    }
+
+    .section-title {
+        font-size: 1.6rem;
+    }
+
+    .btn {
+        padding: 0.6rem 1.25rem;
+    }
+}
+
+/* Tablet Portrait (768px and down) */
+@media (max-width: 768px) {
+    .page-title-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .title-with-action {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .section-title {
+        font-size: 1.5rem;
+    }
+
+    .section-title i {
+        font-size: 1.35rem;
+    }
+
+    .section-subtitle {
+        font-size: 0.9rem;
+    }
+
+    .btn {
+        padding: 0.75rem 1.25rem;
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Dialog Responsive */
+    .force-logout-dialog {
+        margin: 1rem;
+        max-width: calc(100% - 2rem);
+    }
+
+    .force-logout-dialog .modal-header h3 {
+        font-size: 1.25rem;
+    }
+
+    .session-details li {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+
+    .session-details li strong {
+        min-width: auto;
+    }
+
+    .force-logout-dialog .modal-footer {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .force-logout-dialog .modal-footer .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Mobile (480px and down) */
+@media (max-width: 480px) {
+    .section-title {
+        font-size: 1.35rem;
+    }
+
+    .section-title i {
+        font-size: 1.25rem;
+    }
+
+    .section-subtitle {
+        font-size: 0.85rem;
+    }
+
+    .btn {
+        padding: 0.875rem 1.25rem;
+        font-size: 0.95rem;
+    }
+
+    .force-logout-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+
+    .force-logout-dialog .modal-header h3 {
+        font-size: 1.1rem;
+    }
+}
+    }
+}

@@ -1,0 +1,63 @@
+/* ========================================
+   Admin Layout - No Sidebar (Header-based)
+   ======================================== */
+
+.admin-main-content {
+    min-height: calc(100vh - 160px);
+    background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+    padding: 0;
+}
+
+.admin-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* Scrollbar */
+.admin-main-content::-webkit-scrollbar {
+    width: 10px;
+}
+
+.admin-main-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.admin-main-content::-webkit-scrollbar-thumb {
+    background: #003d7a;
+    border-radius: 5px;
+}
+
+.admin-main-content::-webkit-scrollbar-thumb:hover {
+    background: #d4af37;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .admin-container {
+        max-width: 100%;
+        padding: 1.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-container {
+        padding: 1rem;
+    }
+}
+
+/* Fade-in animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.admin-container > * {
+    animation: fadeIn 0.4s ease-out;
+}
