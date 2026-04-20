@@ -1,0 +1,283 @@
+@page "/transactions"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using HBOperations.Application.Common.Interfaces
+@using HBOperations.Domain.Enums
+@using HBOperations.Infrastructure.Identity
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager Navigation
+
+<PageTitle>المعاملات - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <!-- Page Header -->
+    <div class="page-title-section">
+        <div class="title-with-action">
+            <div>
+                <h1 class="section-title"><i class="bi bi-file-earmark-text"></i> إدارة المعاملات</h1>
+                <p class="section-subtitle">عرض وإدارة جميع المعاملات الواردة والصادرة</p>
+            </div>
+            <a href="/transactions/create" class="btn-hb-primary btn-add-transaction">
+                <i class="bi bi-plus-circle"></i> معاملة جديدة
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="hb-card filter-card">
+        <div class="filters-row">
+            <div class="filter-group">
+                <label class="hb-form-label">بحث</label>
+                <input type="text" class="hb-form-control" placeholder="رقم المرجع أو الموضوع..."
+                       @bind="_searchTerm" @bind:event="oninput" />
+            </div>
+            <div class="filter-group">
+                <label class="hb-form-label">الحالة</label>
+                <select class="hb-form-control" @bind="_statusFilter">
+                    <option value="">الكل</option>
+                    @foreach (var status in Enum.GetValues<TransactionStatus>())
+                    {
+                        <option value="@status">@GetStatusLabel(status)</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="hb-form-label">النوع</label>
+                <select class="hb-form-control" @bind="_typeFilter">
+                    <option value="">الكل</option>
+                    @foreach (var type in Enum.GetValues<TransactionType>())
+                    {
+                        <option value="@type">@GetTypeLabel(type)</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="hb-form-label">الأولوية</label>
+                <select class="hb-form-control" @bind="_priorityFilter">
+                    <option value="">الكل</option>
+                    @foreach (var priority in Enum.GetValues<TransactionPriority>())
+                    {
+                        <option value="@priority">@GetPriorityLabel(priority)</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat-item">
+            <i class="bi bi-file-earmark-text"></i>
+            <span class="stat-number">@_totalCount</span>
+            <span class="stat-label">إجمالي</span>
+        </div>
+        <div class="stat-item stat-pending">
+            <i class="bi bi-clock"></i>
+            <span class="stat-number">@_pendingCount</span>
+            <span class="stat-label">قيد المراجعة</span>
+        </div>
+        <div class="stat-item stat-transit">
+            <i class="bi bi-truck"></i>
+            <span class="stat-number">@_inTransitCount</span>
+            <span class="stat-label">قيد النقل</span>
+        </div>
+        <div class="stat-item stat-completed">
+            <i class="bi bi-check-circle"></i>
+            <span class="stat-number">@_completedCount</span>
+            <span class="stat-label">مكتملة</span>
+        </div>
+    </div>
+
+    <!-- Table -->
+    @if (_loading)
+    {
+        <div class="hb-loading">
+            <div class="hb-spinner"></div>
+            <span>جاري تحميل المعاملات...</span>
+        </div>
+    }
+    else if (!_transactions.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <h3>لا توجد معاملات</h3>
+            <p>لم يتم العثور على معاملات تطابق معايير البحث</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-container">
+            <table class="hb-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>رقم المرجع</th>
+                        <th>الموضوع</th>
+                        <th>النوع</th>
+                        <th>من</th>
+                        <th>إلى</th>
+                        <th>الأولوية</th>
+                        <th>الحالة</th>
+                        <th>التاريخ</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var index = 0; }
+                    @foreach (var t in GetFilteredTransactions())
+                    {
+                        index++;
+                        <tr>
+                            <td>@index</td>
+                            <td><span class="ref-number">@t.ReferenceNumber</span></td>
+                            <td class="subject-cell">@t.Subject</td>
+                            <td><span class="hb-badge hb-badge-primary">@GetTypeLabel(t.Type)</span></td>
+                            <td>@(t.SenderBranch?.NameAr ?? "—")</td>
+                            <td>@(t.ReceiverBranch?.NameAr ?? "—")</td>
+                            <td>
+                                <span class="hb-badge @GetPriorityBadgeClass(t.Priority)">
+                                    @GetPriorityLabel(t.Priority)
+                                </span>
+                            </td>
+                            <td>
+                                <span class="status-badge @GetStatusClass(t.Status)">
+                                    <i class="@GetStatusIcon(t.Status)"></i>
+                                    @GetStatusLabel(t.Status)
+                                </span>
+                            </td>
+                            <td class="date-cell">@t.CreatedAt.ToString("yyyy/MM/dd")</td>
+                            <td>
+                                <a href="/transactions/@t.Id" class="action-btn" title="عرض التفاصيل">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<HBOperations.Domain.Entities.Transaction> _transactions = [];
+    private bool _loading = true;
+    private string _searchTerm = "";
+    private string _statusFilter = "";
+    private string _typeFilter = "";
+    private string _priorityFilter = "";
+    private int _totalCount, _pendingCount, _inTransitCount, _completedCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _transactions = await DbContext.Transactions
+            .Include(t => t.SenderBranch)
+            .Include(t => t.ReceiverBranch)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+
+        _totalCount = _transactions.Count;
+        _pendingCount = _transactions.Count(t => t.Status == TransactionStatus.PendingReview);
+        _inTransitCount = _transactions.Count(t => t.Status == TransactionStatus.InTransit);
+        _completedCount = _transactions.Count(t => t.Status is TransactionStatus.Confirmed or TransactionStatus.Archived);
+        _loading = false;
+    }
+
+    private IEnumerable<HBOperations.Domain.Entities.Transaction> GetFilteredTransactions()
+    {
+        var query = _transactions.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+            query = query.Where(t => t.ReferenceNumber.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                || t.Subject.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+
+        if (Enum.TryParse<TransactionStatus>(_statusFilter, out var status))
+            query = query.Where(t => t.Status == status);
+
+        if (Enum.TryParse<TransactionType>(_typeFilter, out var type))
+            query = query.Where(t => t.Type == type);
+
+        if (Enum.TryParse<TransactionPriority>(_priorityFilter, out var priority))
+            query = query.Where(t => t.Priority == priority);
+
+        return query;
+    }
+
+    private static string GetStatusLabel(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "مسودة",
+        TransactionStatus.PendingReview => "قيد المراجعة",
+        TransactionStatus.Approved => "معتمدة",
+        TransactionStatus.InTransit => "قيد النقل",
+        TransactionStatus.Received => "مستلمة",
+        TransactionStatus.Confirmed => "مؤكدة",
+        TransactionStatus.Returned => "مرتجعة",
+        TransactionStatus.Disputed => "متنازع عليها",
+        TransactionStatus.Cancelled => "ملغاة",
+        TransactionStatus.Archived => "مؤرشفة",
+        _ => s.ToString()
+    };
+
+    private static string GetTypeLabel(TransactionType t) => t switch
+    {
+        TransactionType.OutgoingFromHQ => "صادر من الإدارة",
+        TransactionType.IncomingToHQ => "وارد للإدارة",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.InternalDepartment => "داخلي",
+        TransactionType.DocumentDelivery => "تسليم مستندات",
+        TransactionType.CashTransfer => "تحويل نقدي",
+        TransactionType.ReturnedItem => "مرتجع",
+        TransactionType.AuditRequest => "طلب تدقيق",
+        _ => t.ToString()
+    };
+
+    private static string GetPriorityLabel(TransactionPriority p) => p switch
+    {
+        TransactionPriority.Normal => "عادية",
+        TransactionPriority.Important => "مهمة",
+        TransactionPriority.Urgent => "عاجلة",
+        TransactionPriority.Critical => "حرجة",
+        _ => p.ToString()
+    };
+
+    private static string GetStatusClass(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "status-draft",
+        TransactionStatus.PendingReview => "status-pending",
+        TransactionStatus.Approved => "status-approved",
+        TransactionStatus.InTransit => "status-transit",
+        TransactionStatus.Received => "status-received",
+        TransactionStatus.Confirmed => "status-confirmed",
+        TransactionStatus.Returned => "status-returned",
+        TransactionStatus.Disputed => "status-disputed",
+        TransactionStatus.Cancelled => "status-cancelled",
+        TransactionStatus.Archived => "status-archived",
+        _ => ""
+    };
+
+    private static string GetStatusIcon(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "bi bi-pencil",
+        TransactionStatus.PendingReview => "bi bi-clock",
+        TransactionStatus.Approved => "bi bi-check-lg",
+        TransactionStatus.InTransit => "bi bi-truck",
+        TransactionStatus.Received => "bi bi-box-seam",
+        TransactionStatus.Confirmed => "bi bi-check-circle-fill",
+        TransactionStatus.Returned => "bi bi-arrow-return-right",
+        TransactionStatus.Disputed => "bi bi-exclamation-triangle",
+        TransactionStatus.Cancelled => "bi bi-x-circle",
+        TransactionStatus.Archived => "bi bi-archive",
+        _ => "bi bi-circle"
+    };
+
+    private static string GetPriorityBadgeClass(TransactionPriority p) => p switch
+    {
+        TransactionPriority.Normal => "hb-badge-secondary",
+        TransactionPriority.Important => "hb-badge-primary",
+        TransactionPriority.Urgent => "hb-badge-warning",
+        TransactionPriority.Critical => "hb-badge-danger",
+        _ => ""
+    };
+}

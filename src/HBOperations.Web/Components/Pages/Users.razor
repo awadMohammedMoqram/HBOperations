@@ -1,0 +1,159 @@
+@page "/users"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using HBOperations.Application.Common.Interfaces
+@using HBOperations.Infrastructure.Identity
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject UserManager<ApplicationUser> UserManager
+@inject IAppDbContext DbContext
+
+<PageTitle>المستخدمين - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="page-title-section">
+        <div class="title-with-action">
+            <div>
+                <h1 class="section-title"><i class="bi bi-people"></i> إدارة المستخدمين</h1>
+                <p class="section-subtitle">إدارة حسابات المستخدمين والصلاحيات</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="hb-card filter-card">
+        <div class="search-row">
+            <div class="filter-group">
+                <label class="hb-form-label">بحث</label>
+                <input type="text" class="hb-form-control" placeholder="الاسم أو البريد الإلكتروني..."
+                       @bind="_searchTerm" @bind:event="oninput" />
+            </div>
+            <div class="filter-group">
+                <label class="hb-form-label">الحالة</label>
+                <select class="hb-form-control" @bind="_activeFilter">
+                    <option value="">الكل</option>
+                    <option value="true">نشط</option>
+                    <option value="false">معطل</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="user-stats">
+        <div class="stat-item">
+            <i class="bi bi-people-fill"></i>
+            <span class="stat-number">@_users.Count</span>
+            <span class="stat-label">إجمالي المستخدمين</span>
+        </div>
+        <div class="stat-item stat-active">
+            <i class="bi bi-person-check-fill"></i>
+            <span class="stat-number">@_users.Count(u => u.IsActive)</span>
+            <span class="stat-label">نشط</span>
+        </div>
+        <div class="stat-item stat-inactive">
+            <i class="bi bi-person-x-fill"></i>
+            <span class="stat-number">@_users.Count(u => !u.IsActive)</span>
+            <span class="stat-label">معطل</span>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="hb-loading">
+            <div class="hb-spinner"></div>
+            <span>جاري تحميل المستخدمين...</span>
+        </div>
+    }
+    else
+    {
+        <div class="table-container">
+            <table class="hb-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>الاسم</th>
+                        <th>البريد الإلكتروني</th>
+                        <th>الرقم الوظيفي</th>
+                        <th>المسمى الوظيفي</th>
+                        <th>الفرع</th>
+                        <th>الحالة</th>
+                        <th>آخر دخول</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var index = 0; }
+                    @foreach (var user in GetFilteredUsers())
+                    {
+                        index++;
+                        <tr>
+                            <td>@index</td>
+                            <td class="user-name-cell">
+                                <div class="user-avatar">@GetInitials(user.FullNameAr)</div>
+                                <span>@user.FullNameAr</span>
+                            </td>
+                            <td dir="ltr" style="text-align:center;">@user.Email</td>
+                            <td style="text-align:center;">@(user.EmployeeNumber ?? "—")</td>
+                            <td>@(user.JobTitle ?? "—")</td>
+                            <td>@(_branchNames.GetValueOrDefault(user.BranchId ?? Guid.Empty, "—"))</td>
+                            <td>
+                                @if (user.IsActive)
+                                {
+                                    <span class="hb-badge hb-badge-success">نشط</span>
+                                }
+                                else
+                                {
+                                    <span class="hb-badge hb-badge-danger">معطل</span>
+                                }
+                            </td>
+                            <td class="date-cell">
+                                @(user.LastLoginAt?.ToString("yyyy/MM/dd HH:mm") ?? "لم يسجل دخول")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<ApplicationUser> _users = [];
+    private Dictionary<Guid, string> _branchNames = [];
+    private bool _loading = true;
+    private string _searchTerm = "";
+    private string _activeFilter = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _users = await UserManager.Users
+            .OrderBy(u => u.FullNameAr)
+            .ToListAsync();
+
+        _branchNames = await DbContext.Branches
+            .ToDictionaryAsync(b => b.Id, b => b.NameAr);
+
+        _loading = false;
+    }
+
+    private IEnumerable<ApplicationUser> GetFilteredUsers()
+    {
+        var query = _users.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+            query = query.Where(u =>
+                (u.FullNameAr?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (u.Email?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false));
+
+        if (bool.TryParse(_activeFilter, out var isActive))
+            query = query.Where(u => u.IsActive == isActive);
+
+        return query;
+    }
+
+    private static string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "؟";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 ? $"{parts[0][0]}{parts[1][0]}" : $"{parts[0][0]}";
+    }
+}

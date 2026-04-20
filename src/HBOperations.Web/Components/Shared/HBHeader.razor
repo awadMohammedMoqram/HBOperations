@@ -25,11 +25,11 @@
             <a href="/transactions" class="nav-link @GetActiveClass("/transactions")" @onclick="CloseMobileMenu">
                 <i class="bi bi-file-earmark-text"></i> المعاملات
             </a>
-            <a href="/transactions/create" class="nav-link @GetActiveClass("/transactions/create", true)" @onclick="CloseMobileMenu">
-                <i class="bi bi-plus-circle"></i> معاملة جديدة
-            </a>
             <a href="/branches" class="nav-link @GetActiveClass("/branches")" @onclick="CloseMobileMenu">
                 <i class="bi bi-building"></i> الفروع
+            </a>
+            <a href="/departments" class="nav-link @GetActiveClass("/departments")" @onclick="CloseMobileMenu">
+                <i class="bi bi-diagram-3"></i> الأقسام
             </a>
 
             <AuthorizeView Roles="SuperAdmin,ITAdmin">
@@ -44,6 +44,9 @@
             <AuthorizeView>
                 <Authorized>
                     <div class="user-section">
+                        <a href="/notifications" class="notif-btn @GetActiveClass("/notifications")" @onclick="CloseMobileMenu" title="الإشعارات">
+                            <i class="bi bi-bell"></i>
+                        </a>
                         <span class="user-name">@(context.User.FindFirst("FullNameAr")?.Value ?? context.User.Identity?.Name ?? "مستخدم")</span>
                         <form method="post" action="/logout">
                             <button type="submit" class="logout-btn">

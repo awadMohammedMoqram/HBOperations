@@ -1,0 +1,339 @@
+@page "/transactions/{Id:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using HBOperations.Application.Common.Interfaces
+@using HBOperations.Domain.Enums
+@using HBOperations.Domain.Entities
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+@inject NavigationManager Navigation
+
+<PageTitle>تفاصيل المعاملة - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    @if (_loading)
+    {
+        <div class="hb-loading"><div class="hb-spinner"></div><span>جاري تحميل البيانات...</span></div>
+    }
+    else if (_transaction is null)
+    {
+        <div class="not-found">
+            <i class="bi bi-file-earmark-x"></i>
+            <h2>المعاملة غير موجودة</h2>
+            <p>لم يتم العثور على معاملة بهذا المعرّف</p>
+            <a href="/transactions" class="btn-hb-primary"><i class="bi bi-arrow-right"></i> العودة للمعاملات</a>
+        </div>
+    }
+    else
+    {
+        <!-- Page Header -->
+        <div class="page-title-section">
+            <div class="title-with-action">
+                <div>
+                    <h1 class="section-title">
+                        <i class="bi bi-file-earmark-text"></i>
+                        المعاملة: <span class="ref-number">@_transaction.ReferenceNumber</span>
+                    </h1>
+                    <p class="section-subtitle">@_transaction.Subject</p>
+                </div>
+                <div class="title-actions">
+                    <a href="/transactions" class="btn btn-outline"><i class="bi bi-arrow-right"></i> العودة</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-current">
+                <span class="hb-badge-@GetStatusBadge(_transaction.Status) status-badge-lg">
+                    <i class="bi @GetStatusIcon(_transaction.Status)"></i>
+                    @GetStatusLabel(_transaction.Status)
+                </span>
+            </div>
+            <div class="status-meta">
+                <span><i class="bi bi-calendar3"></i> @_transaction.CreatedAt.ToString("yyyy/MM/dd HH:mm")</span>
+                @if (_transaction.DueDate.HasValue)
+                {
+                    var isOverdue = _transaction.DueDate < DateTime.UtcNow && _transaction.Status != TransactionStatus.Confirmed && _transaction.Status != TransactionStatus.Archived;
+                    <span class="@(isOverdue ? "overdue-text" : "")">
+                        <i class="bi bi-alarm"></i> الاستحقاق: @_transaction.DueDate.Value.ToString("yyyy/MM/dd")
+                        @if (isOverdue) { <span class="overdue-badge">متأخرة</span> }
+                    </span>
+                }
+            </div>
+        </div>
+
+        <!-- Info Cards Grid -->
+        <div class="detail-grid">
+            <!-- Main Info -->
+            <div class="hb-card detail-card">
+                <h3 class="card-section-title"><i class="bi bi-info-circle"></i> معلومات المعاملة</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">رقم المرجع</span>
+                        <span class="info-value ref-mono">@_transaction.ReferenceNumber</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">النوع</span>
+                        <span class="info-value">@GetTypeLabel(_transaction.Type)</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">الأولوية</span>
+                        <span class="info-value">
+                            <span class="priority-dot @GetPriorityClass(_transaction.Priority)"></span>
+                            @GetPriorityLabel(_transaction.Priority)
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">تاريخ الإنشاء</span>
+                        <span class="info-value">@_transaction.CreatedAt.ToString("yyyy/MM/dd HH:mm")</span>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(_transaction.Description))
+                {
+                    <div class="description-block">
+                        <span class="info-label">الوصف</span>
+                        <p>@_transaction.Description</p>
+                    </div>
+                }
+            </div>
+
+            <!-- Sender / Receiver -->
+            <div class="hb-card detail-card">
+                <h3 class="card-section-title"><i class="bi bi-arrow-left-right"></i> المرسل والمستلم</h3>
+                <div class="sender-receiver">
+                    <div class="sr-box sr-sender">
+                        <div class="sr-icon"><i class="bi bi-arrow-up-left-circle"></i></div>
+                        <h4>المرسل</h4>
+                        <p class="sr-branch">@(_transaction.SenderBranch?.NameAr ?? "—")</p>
+                        @if (_transaction.SenderDepartment != null)
+                        {
+                            <p class="sr-dept">@_transaction.SenderDepartment.NameAr</p>
+                        }
+                    </div>
+                    <div class="sr-arrow"><i class="bi bi-arrow-left"></i></div>
+                    <div class="sr-box sr-receiver">
+                        <div class="sr-icon"><i class="bi bi-arrow-down-right-circle"></i></div>
+                        <h4>المستلم</h4>
+                        <p class="sr-branch">@(_transaction.ReceiverBranch?.NameAr ?? "—")</p>
+                        @if (_transaction.ReceiverDepartment != null)
+                        {
+                            <p class="sr-dept">@_transaction.ReceiverDepartment.NameAr</p>
+                        }
+                    </div>
+                </div>
+                <div class="dates-row">
+                    @if (_transaction.SentAt.HasValue)
+                    {
+                        <div class="date-item"><span class="info-label">تاريخ الإرسال</span><span>@_transaction.SentAt.Value.ToString("yyyy/MM/dd HH:mm")</span></div>
+                    }
+                    @if (_transaction.ReceivedAt.HasValue)
+                    {
+                        <div class="date-item"><span class="info-label">تاريخ الاستلام</span><span>@_transaction.ReceivedAt.Value.ToString("yyyy/MM/dd HH:mm")</span></div>
+                    }
+                    @if (_transaction.CompletedAt.HasValue)
+                    {
+                        <div class="date-item"><span class="info-label">تاريخ الإنجاز</span><span>@_transaction.CompletedAt.Value.ToString("yyyy/MM/dd HH:mm")</span></div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Documents -->
+        <div class="hb-card detail-card">
+            <h3 class="card-section-title"><i class="bi bi-paperclip"></i> المستندات (@_transaction.Documents.Count)</h3>
+            @if (_transaction.Documents.Any())
+            {
+                <div class="documents-list">
+                    @foreach (var doc in _transaction.Documents)
+                    {
+                        <div class="doc-item">
+                            <div class="doc-icon"><i class="bi bi-file-earmark-pdf"></i></div>
+                            <div class="doc-info">
+                                <span class="doc-name">@doc.OriginalFileName</span>
+                                <span class="doc-meta">@GetDocTypeName(doc.DocumentType) — @FormatFileSize(doc.FileSizeBytes) — v@(doc.Version)</span>
+                            </div>
+                            <span class="doc-date">@doc.UploadedAt.ToString("yyyy/MM/dd")</span>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="empty-text">لا توجد مستندات مرفقة</p>
+            }
+        </div>
+
+        <!-- History Timeline -->
+        <div class="hb-card detail-card">
+            <h3 class="card-section-title"><i class="bi bi-clock-history"></i> سجل الحركات (@_transaction.History.Count)</h3>
+            @if (_transaction.History.Any())
+            {
+                <div class="timeline">
+                    @foreach (var h in _transaction.History.OrderByDescending(x => x.PerformedAt))
+                    {
+                        <div class="timeline-item">
+                            <div class="timeline-dot"></div>
+                            <div class="timeline-content">
+                                <div class="timeline-header">
+                                    <span class="timeline-action">@h.Action</span>
+                                    <span class="timeline-date">@h.PerformedAt.ToString("yyyy/MM/dd HH:mm")</span>
+                                </div>
+                                <div class="timeline-status">
+                                    <span class="hb-badge-@GetStatusBadge(h.FromStatus)">@GetStatusLabel(h.FromStatus)</span>
+                                    <i class="bi bi-arrow-left"></i>
+                                    <span class="hb-badge-@GetStatusBadge(h.ToStatus)">@GetStatusLabel(h.ToStatus)</span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(h.Notes))
+                                {
+                                    <p class="timeline-notes">@h.Notes</p>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="empty-text">لا يوجد سجل حركات بعد</p>
+            }
+        </div>
+
+        <!-- Notes -->
+        <div class="hb-card detail-card">
+            <h3 class="card-section-title"><i class="bi bi-chat-left-text"></i> الملاحظات (@_transaction.Notes.Count)</h3>
+            @if (_transaction.Notes.Any())
+            {
+                <div class="notes-list">
+                    @foreach (var note in _transaction.Notes.OrderByDescending(n => n.CreatedAt))
+                    {
+                        <div class="note-item">
+                            <div class="note-header">
+                                <i class="bi bi-person-circle"></i>
+                                <span class="note-date">@note.CreatedAt.ToString("yyyy/MM/dd HH:mm")</span>
+                            </div>
+                            <p class="note-content">@note.Content</p>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="empty-text">لا توجد ملاحظات</p>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Transaction? _transaction;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _transaction = await DbContext.Transactions
+            .Include(t => t.SenderBranch)
+            .Include(t => t.ReceiverBranch)
+            .Include(t => t.SenderDepartment)
+            .Include(t => t.ReceiverDepartment)
+            .Include(t => t.Documents)
+            .Include(t => t.History)
+            .Include(t => t.Notes)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == Id);
+
+        _loading = false;
+    }
+
+    private static string GetStatusLabel(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "مسودة",
+        TransactionStatus.PendingReview => "قيد المراجعة",
+        TransactionStatus.Approved => "معتمدة",
+        TransactionStatus.InTransit => "قيد التسليم",
+        TransactionStatus.Received => "مستلمة",
+        TransactionStatus.Confirmed => "مؤكدة",
+        TransactionStatus.Returned => "مرتجعة",
+        TransactionStatus.Disputed => "متنازع عليها",
+        TransactionStatus.Cancelled => "ملغاة",
+        TransactionStatus.Archived => "مؤرشفة",
+        _ => s.ToString()
+    };
+
+    private static string GetStatusBadge(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "secondary",
+        TransactionStatus.PendingReview => "warning",
+        TransactionStatus.Approved => "info",
+        TransactionStatus.InTransit => "primary",
+        TransactionStatus.Received or TransactionStatus.Confirmed => "success",
+        TransactionStatus.Returned or TransactionStatus.Disputed => "danger",
+        _ => "secondary"
+    };
+
+    private static string GetStatusIcon(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "bi-pencil",
+        TransactionStatus.PendingReview => "bi-hourglass-split",
+        TransactionStatus.Approved => "bi-check-circle",
+        TransactionStatus.InTransit => "bi-truck",
+        TransactionStatus.Received => "bi-inbox",
+        TransactionStatus.Confirmed => "bi-check2-all",
+        TransactionStatus.Returned => "bi-arrow-return-right",
+        TransactionStatus.Disputed => "bi-exclamation-diamond",
+        TransactionStatus.Cancelled => "bi-x-circle",
+        TransactionStatus.Archived => "bi-archive",
+        _ => "bi-question-circle"
+    };
+
+    private static string GetTypeLabel(TransactionType t) => t switch
+    {
+        TransactionType.OutgoingFromHQ => "صادر من الإدارة العامة",
+        TransactionType.IncomingToHQ => "وارد للإدارة العامة",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.InternalDepartment => "داخلي بين الأقسام",
+        TransactionType.DocumentDelivery => "تسليم مستندات",
+        TransactionType.CashTransfer => "تحويل نقدي",
+        TransactionType.ReturnedItem => "مرتجع",
+        TransactionType.AuditRequest => "طلب تدقيق",
+        _ => t.ToString()
+    };
+
+    private static string GetPriorityLabel(TransactionPriority p) => p switch
+    {
+        TransactionPriority.Normal => "عادية",
+        TransactionPriority.Important => "مهمة",
+        TransactionPriority.Urgent => "عاجلة",
+        TransactionPriority.Critical => "حرجة",
+        _ => p.ToString()
+    };
+
+    private static string GetPriorityClass(TransactionPriority p) => p switch
+    {
+        TransactionPriority.Normal => "priority-normal",
+        TransactionPriority.Important => "priority-important",
+        TransactionPriority.Urgent => "priority-urgent",
+        TransactionPriority.Critical => "priority-critical",
+        _ => ""
+    };
+
+    private static string GetDocTypeName(DocumentType d) => d switch
+    {
+        DocumentType.Original => "أصلي",
+        DocumentType.Receipt => "إيصال",
+        DocumentType.Approval => "موافقة",
+        DocumentType.ReturnReason => "سبب إرجاع",
+        DocumentType.DisputeEvidence => "دليل نزاع",
+        DocumentType.Confirmation => "تأكيد",
+        DocumentType.Attachment => "مرفق",
+        _ => d.ToString()
+    };
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024):F1} MB";
+    }
+}

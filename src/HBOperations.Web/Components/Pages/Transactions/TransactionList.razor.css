@@ -1,0 +1,216 @@
+/* Transactions List Page */
+
+.page-container {
+    padding: 1rem 0;
+}
+
+/* Filter Card */
+.filter-card {
+    padding: 1.5rem !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.filters-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 1rem;
+    align-items: end;
+}
+
+.filter-group label {
+    font-size: 0.85rem;
+    margin-bottom: 0.3rem;
+}
+
+.filter-group .hb-form-control {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.9rem;
+}
+
+/* Stats Bar */
+.stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-item {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border-right: 4px solid #003d7a;
+}
+
+.stat-item i {
+    font-size: 1.5rem;
+    color: #003d7a;
+}
+
+.stat-item.stat-pending {
+    border-right-color: #ffa500;
+}
+
+.stat-item.stat-pending i {
+    color: #ffa500;
+}
+
+.stat-item.stat-transit {
+    border-right-color: #17a2b8;
+}
+
+.stat-item.stat-transit i {
+    color: #17a2b8;
+}
+
+.stat-item.stat-completed {
+    border-right-color: #28a745;
+}
+
+.stat-item.stat-completed i {
+    color: #28a745;
+}
+
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #003d7a;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+/* Table Container */
+.table-container {
+    background: white;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.ref-number {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #003d7a;
+    font-size: 0.9rem;
+}
+
+.subject-cell {
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.date-cell {
+    font-size: 0.85rem;
+    color: #6c757d;
+    direction: ltr;
+    text-align: center;
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-draft { background: #e9ecef; color: #495057; }
+.status-pending { background: #fff3cd; color: #856404; }
+.status-approved { background: #d1e7dd; color: #0f5132; }
+.status-transit { background: #cff4fc; color: #055160; }
+.status-received { background: #cfe2ff; color: #084298; }
+.status-confirmed { background: #d1e7dd; color: #0f5132; }
+.status-returned { background: #f8d7da; color: #842029; }
+.status-disputed { background: #fff3cd; color: #664d03; }
+.status-cancelled { background: #f8d7da; color: #842029; }
+.status-archived { background: #e2e3e5; color: #41464b; }
+
+/* Action Button */
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    color: #003d7a;
+    background: rgba(0, 61, 122, 0.08);
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+.action-btn:hover {
+    background: #003d7a;
+    color: white;
+    transform: scale(1.1);
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.empty-state i {
+    font-size: 4rem;
+    color: #d4af37;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.empty-state h3 {
+    color: #003d7a;
+    margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+    color: #6c757d;
+    margin-bottom: 0;
+}
+
+/* Add Transaction Button */
+.btn-add-transaction {
+    text-decoration: none !important;
+    padding: 0.6rem 1.5rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+/* Responsive */
+@media (max-width: 992px) {
+    .filters-row {
+        grid-template-columns: 1fr 1fr;
+    }
+    .stats-bar {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .filters-row {
+        grid-template-columns: 1fr;
+    }
+    .stats-bar {
+        grid-template-columns: 1fr;
+    }
+    .table-container {
+        overflow-x: auto;
+    }
+}

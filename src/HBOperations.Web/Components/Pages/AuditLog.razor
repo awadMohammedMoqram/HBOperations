@@ -1,0 +1,192 @@
+@page "/audit-log"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using HBOperations.Application.Common.Interfaces
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+
+<PageTitle>سجل المراجعة - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="page-title-section">
+        <div class="title-with-action">
+            <div>
+                <h1 class="section-title"><i class="bi bi-journal-text"></i> سجل المراجعة</h1>
+                <p class="section-subtitle">سجل شامل لجميع العمليات والأنشطة في النظام</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="hb-card filter-card">
+        <div class="filters-row">
+            <div class="filter-group">
+                <label class="hb-form-label">بحث</label>
+                <input type="text" class="hb-form-control" placeholder="اسم المستخدم أو العملية..."
+                       @bind="_searchTerm" @bind:event="oninput" />
+            </div>
+            <div class="filter-group">
+                <label class="hb-form-label">نوع العملية</label>
+                <select class="hb-form-control" @bind="_actionFilter">
+                    <option value="">الكل</option>
+                    @foreach (var action in _availableActions)
+                    {
+                        <option value="@action">@action</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="hb-form-label">من تاريخ</label>
+                <input type="date" class="hb-form-control" @bind="_fromDate" />
+            </div>
+            <div class="filter-group">
+                <label class="hb-form-label">إلى تاريخ</label>
+                <input type="date" class="hb-form-control" @bind="_toDate" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="audit-stats">
+        <div class="stat-item">
+            <i class="bi bi-journal-text"></i>
+            <span class="stat-number">@_totalCount</span>
+            <span class="stat-label">إجمالي العمليات</span>
+        </div>
+        <div class="stat-item stat-today">
+            <i class="bi bi-calendar-check"></i>
+            <span class="stat-number">@_todayCount</span>
+            <span class="stat-label">اليوم</span>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="hb-loading">
+            <div class="hb-spinner"></div>
+            <span>جاري تحميل السجلات...</span>
+        </div>
+    }
+    else if (!_logs.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-journal-x"></i>
+            <h3>لا توجد سجلات</h3>
+            <p>لم يتم تسجيل أي عمليات بعد أو لا توجد نتائج تطابق البحث</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-container">
+            <table class="hb-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>التاريخ والوقت</th>
+                        <th>المستخدم</th>
+                        <th>العملية</th>
+                        <th>الكيان</th>
+                        <th>عنوان IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var index = 0; }
+                    @foreach (var log in GetFilteredLogs())
+                    {
+                        index++;
+                        <tr>
+                            <td>@index</td>
+                            <td class="date-cell">
+                                <div class="date-time">
+                                    <span class="date">@log.Timestamp.ToString("yyyy/MM/dd")</span>
+                                    <span class="time">@log.Timestamp.ToString("HH:mm:ss")</span>
+                                </div>
+                            </td>
+                            <td class="user-cell">
+                                <i class="bi bi-person-circle"></i>
+                                @(log.UserName ?? "—")
+                            </td>
+                            <td>
+                                <span class="action-badge @GetActionClass(log.Action)">
+                                    @GetActionLabel(log.Action)
+                                </span>
+                            </td>
+                            <td>
+                                <span class="entity-name">@log.EntityName</span>
+                            </td>
+                            <td dir="ltr" style="text-align:center;">
+                                <span class="ip-address">@(log.IpAddress ?? "—")</span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<HBOperations.Domain.Entities.AuditLog> _logs = [];
+    private List<string> _availableActions = [];
+    private bool _loading = true;
+    private string _searchTerm = "";
+    private string _actionFilter = "";
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private int _totalCount, _todayCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _logs = await DbContext.AuditLogs
+            .OrderByDescending(l => l.Timestamp)
+            .Take(500)
+            .ToListAsync();
+
+        _availableActions = _logs.Select(l => l.Action).Distinct().OrderBy(a => a).ToList();
+        _totalCount = _logs.Count;
+        _todayCount = _logs.Count(l => l.Timestamp.Date == DateTime.UtcNow.Date);
+        _loading = false;
+    }
+
+    private IEnumerable<HBOperations.Domain.Entities.AuditLog> GetFilteredLogs()
+    {
+        var query = _logs.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+            query = query.Where(l =>
+                (l.UserName?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                l.Action.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                l.EntityName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(_actionFilter))
+            query = query.Where(l => l.Action == _actionFilter);
+
+        if (_fromDate.HasValue)
+            query = query.Where(l => l.Timestamp.Date >= _fromDate.Value.Date);
+
+        if (_toDate.HasValue)
+            query = query.Where(l => l.Timestamp.Date <= _toDate.Value.Date);
+
+        return query;
+    }
+
+    private static string GetActionLabel(string action) => action switch
+    {
+        "Create" => "إنشاء",
+        "Update" => "تعديل",
+        "Delete" => "حذف",
+        "StatusChange" => "تغيير حالة",
+        "Login" => "تسجيل دخول",
+        "Logout" => "تسجيل خروج",
+        _ => action
+    };
+
+    private static string GetActionClass(string action) => action switch
+    {
+        "Create" => "action-create",
+        "Update" => "action-update",
+        "Delete" => "action-delete",
+        "StatusChange" => "action-status",
+        "Login" => "action-login",
+        _ => "action-default"
+    };
+}

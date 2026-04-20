@@ -1,0 +1,171 @@
+/* Audit Log Page */
+
+.page-container {
+    padding: 1rem 0;
+}
+
+.filter-card {
+    padding: 1.5rem !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.filters-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 1rem;
+    align-items: end;
+}
+
+.filter-group label {
+    font-size: 0.85rem;
+    margin-bottom: 0.3rem;
+}
+
+.filter-group .hb-form-control {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.9rem;
+}
+
+/* Stats */
+.audit-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-item {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border-right: 4px solid #003d7a;
+}
+
+.stat-item i {
+    font-size: 1.5rem;
+    color: #003d7a;
+}
+
+.stat-item.stat-today {
+    border-right-color: #d4af37;
+}
+
+.stat-item.stat-today i {
+    color: #d4af37;
+}
+
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #003d7a;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+/* Table */
+.table-container {
+    background: white;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.date-cell .date-time {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    direction: ltr;
+}
+
+.date-time .date {
+    font-weight: 600;
+    color: #003d7a;
+    font-size: 0.85rem;
+}
+
+.date-time .time {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.user-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.user-cell i {
+    color: #003d7a;
+    font-size: 1.1rem;
+}
+
+/* Action Badges */
+.action-badge {
+    display: inline-block;
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.action-create { background: #d1e7dd; color: #0f5132; }
+.action-update { background: #cfe2ff; color: #084298; }
+.action-delete { background: #f8d7da; color: #842029; }
+.action-status { background: #fff3cd; color: #664d03; }
+.action-login { background: #e2e3e5; color: #41464b; }
+.action-default { background: #f0f0f0; color: #333; }
+
+.entity-name {
+    font-size: 0.85rem;
+    color: #495057;
+}
+
+.ip-address {
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.empty-state i {
+    font-size: 4rem;
+    color: #d4af37;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.empty-state h3 {
+    color: #003d7a;
+    margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+    color: #6c757d;
+}
+
+@media (max-width: 992px) {
+    .filters-row { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 768px) {
+    .filters-row { grid-template-columns: 1fr; }
+    .audit-stats { grid-template-columns: 1fr; }
+    .table-container { overflow-x: auto; }
+}

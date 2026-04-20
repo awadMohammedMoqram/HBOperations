@@ -1,0 +1,242 @@
+@page "/transactions/create"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using HBOperations.Application.Common.Interfaces
+@using HBOperations.Domain.Entities
+@using HBOperations.Domain.Enums
+@using HBOperations.Infrastructure.Identity
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+@inject ICurrentUserService CurrentUser
+@inject UserManager<ApplicationUser> UserManager
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>معاملة جديدة - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="page-title-section">
+        <div class="title-with-action">
+            <div>
+                <h1 class="section-title"><i class="bi bi-plus-circle"></i> إنشاء معاملة جديدة</h1>
+                <p class="section-subtitle">إنشاء معاملة استلام أو تسليم جديدة بين الإدارة والفروع</p>
+            </div>
+            <button type="button" class="btn-hb-outline btn-back" @onclick="GoBack">
+                <i class="bi bi-arrow-right"></i> العودة
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="hb-alert hb-alert-success">
+            <i class="bi bi-check-circle-fill"></i> @_successMessage
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="hb-alert hb-alert-danger">
+            <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+        </div>
+    }
+
+    <div class="form-layout">
+        <div class="hb-card">
+            <div class="hb-card-header">
+                <h2 class="hb-card-title"><i class="bi bi-file-earmark-plus"></i> بيانات المعاملة</h2>
+            </div>
+
+            <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="CreateTransaction">
+                <div class="form-grid">
+                    <!-- الموضوع -->
+                    <div class="hb-form-group full-width">
+                        <label class="hb-form-label">الموضوع *</label>
+                        <InputText @bind-Value="_model.Subject" class="hb-form-control" placeholder="أدخل موضوع المعاملة" />
+                    </div>
+
+                    <!-- الوصف -->
+                    <div class="hb-form-group full-width">
+                        <label class="hb-form-label">الوصف</label>
+                        <InputTextArea @bind-Value="_model.Description" class="hb-form-control textarea" rows="3"
+                                       placeholder="وصف تفصيلي للمعاملة (اختياري)" />
+                    </div>
+
+                    <!-- النوع -->
+                    <div class="hb-form-group">
+                        <label class="hb-form-label">نوع المعاملة *</label>
+                        <InputSelect @bind-Value="_model.Type" class="hb-form-control">
+                            @foreach (var type in Enum.GetValues<TransactionType>())
+                            {
+                                <option value="@type">@GetTypeLabel(type)</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <!-- الأولوية -->
+                    <div class="hb-form-group">
+                        <label class="hb-form-label">الأولوية *</label>
+                        <InputSelect @bind-Value="_model.Priority" class="hb-form-control">
+                            @foreach (var priority in Enum.GetValues<TransactionPriority>())
+                            {
+                                <option value="@priority">@GetPriorityLabel(priority)</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <!-- فرع المرسل -->
+                    <div class="hb-form-group">
+                        <label class="hb-form-label">الفرع المرسل *</label>
+                        <InputSelect @bind-Value="_model.SenderBranchId" class="hb-form-control">
+                            <option value="">-- اختر الفرع --</option>
+                            @foreach (var branch in _branches)
+                            {
+                                <option value="@branch.Id">@branch.NameAr</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <!-- فرع المستلم -->
+                    <div class="hb-form-group">
+                        <label class="hb-form-label">الفرع المستلم *</label>
+                        <InputSelect @bind-Value="_model.ReceiverBranchId" class="hb-form-control">
+                            <option value="">-- اختر الفرع --</option>
+                            @foreach (var branch in _branches)
+                            {
+                                <option value="@branch.Id">@branch.NameAr</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <!-- تاريخ الاستحقاق -->
+                    <div class="hb-form-group">
+                        <label class="hb-form-label">تاريخ الاستحقاق</label>
+                        <InputDate @bind-Value="_model.DueDate" class="hb-form-control" />
+                    </div>
+                </div>
+
+                <!-- Submit -->
+                <div class="form-actions">
+                    <button type="submit" class="btn-hb-primary" disabled="@_submitting">
+                        @if (_submitting)
+                        {
+                            <span class="hb-spinner" style="width:20px;height:20px;border-width:2px;"></span>
+                            <span>جاري الحفظ...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-lg"></i>
+                            <span>إنشاء المعاملة</span>
+                        }
+                    </button>
+                    <a href="/transactions" class="btn-hb-outline">
+                        <i class="bi bi-x-lg"></i> إلغاء
+                    </a>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private CreateTransactionModel _model = new();
+    private List<Branch> _branches = [];
+    private bool _submitting;
+    private string? _successMessage;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branches = await DbContext.Branches
+            .Where(b => b.IsActive)
+            .OrderBy(b => b.NameAr)
+            .ToListAsync();
+    }
+
+    private async Task GoBack()
+    {
+        await JS.InvokeVoidAsync("history.back");
+    }
+
+    private async Task HandleSubmit()
+    {
+        _submitting = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_model.Subject))
+            {
+                _errorMessage = "يرجى إدخال موضوع المعاملة";
+                return;
+            }
+
+            var refNumber = $"TXN-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString()[..6].ToUpper()}";
+
+            var transaction = new Transaction
+            {
+                Id = Guid.NewGuid(),
+                ReferenceNumber = refNumber,
+                Subject = _model.Subject,
+                Description = _model.Description,
+                Type = _model.Type,
+                Priority = _model.Priority,
+                Status = TransactionStatus.Draft,
+                SenderBranchId = string.IsNullOrEmpty(_model.SenderBranchId) ? null : Guid.Parse(_model.SenderBranchId),
+                ReceiverBranchId = string.IsNullOrEmpty(_model.ReceiverBranchId) ? null : Guid.Parse(_model.ReceiverBranchId),
+                DueDate = _model.DueDate,
+                SenderUserId = CurrentUser.UserId,
+                ReceiverUserId = Guid.Empty,
+                CreatedByUserId = CurrentUser.UserId
+            };
+
+            DbContext.Transactions.Add(transaction);
+            await DbContext.SaveChangesAsync();
+
+            _successMessage = $"تم إنشاء المعاملة بنجاح - رقم المرجع: {refNumber}";
+            _model = new();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"حدث خطأ أثناء إنشاء المعاملة: {ex.Message}";
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private static string GetTypeLabel(TransactionType t) => t switch
+    {
+        TransactionType.OutgoingFromHQ => "صادر من الإدارة",
+        TransactionType.IncomingToHQ => "وارد للإدارة",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.InternalDepartment => "داخلي",
+        TransactionType.DocumentDelivery => "تسليم مستندات",
+        TransactionType.CashTransfer => "تحويل نقدي",
+        TransactionType.ReturnedItem => "مرتجع",
+        TransactionType.AuditRequest => "طلب تدقيق",
+        _ => t.ToString()
+    };
+
+    private static string GetPriorityLabel(TransactionPriority p) => p switch
+    {
+        TransactionPriority.Normal => "عادية",
+        TransactionPriority.Important => "مهمة",
+        TransactionPriority.Urgent => "عاجلة",
+        TransactionPriority.Critical => "حرجة",
+        _ => p.ToString()
+    };
+
+    private class CreateTransactionModel
+    {
+        public string Subject { get; set; } = "";
+        public string? Description { get; set; }
+        public TransactionType Type { get; set; }
+        public TransactionPriority Priority { get; set; }
+        public string? SenderBranchId { get; set; }
+        public string? ReceiverBranchId { get; set; }
+        public DateTime? DueDate { get; set; }
+    }
+}

@@ -1,146 +1,251 @@
 ﻿@page "/"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using Microsoft.AspNetCore.Components.Authorization
+@using HBOperations.Application.Common.Interfaces
+@using HBOperations.Domain.Enums
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+@inject ICurrentUserService CurrentUser
 
 <PageTitle>لوحة التحكم - بنك حضرموت</PageTitle>
 
 <div class="hb-home-page">
-    <!-- Hero Section -->
+    <!-- Welcome Banner -->
     <section class="hb-hero">
         <div class="container">
             <div class="hero-content">
                 <div class="hero-logo">
                     <img src="Images/aboutLogo-fDwVp-So.svg" alt="بنك حضرموت" />
                 </div>
-                <h1 class="hero-title">نظام إدارة العمليات</h1>
+                <h1 class="hero-title">مرحباً، @(CurrentUser.FullName ?? "مستخدم")</h1>
                 <p class="hero-subtitle">
                     <i class="bi bi-shield-check"></i>
-                    إدارة عمليات الاستلام والتسليم بين الإدارة العامة والفروع
+                    نظام إدارة العمليات — الإدارة العامة والفروع
                 </p>
             </div>
         </div>
         <div class="hero-pattern"></div>
     </section>
 
-    <!-- Services Section -->
-    <section class="hb-services">
+    <!-- Dashboard Stats -->
+    <section class="dashboard-section">
         <div class="container">
-            <h2 class="hb-section-title">الخدمات المتاحة</h2>
-
-            <div class="services-grid">
-                <a href="/transactions/create" class="service-card" style="text-decoration: none;">
-                    <div class="service-icon service-icon-primary">
-                        <i class="bi bi-plus-circle-fill"></i>
+            <div class="stats-grid">
+                <a href="/transactions" class="stat-card stat-total">
+                    <div class="stat-icon"><i class="bi bi-archive-fill"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_totalTransactions</span>
+                        <span class="stat-label">إجمالي المعاملات</span>
                     </div>
-                    <h3 class="service-title">معاملة جديدة</h3>
-                    <p class="service-desc">إنشاء معاملة استلام أو تسليم جديدة مع إرفاق المستندات المطلوبة</p>
-                    <ul class="service-features">
-                        <li><i class="bi bi-check"></i> إرفاق مستندات PDF</li>
-                        <li><i class="bi bi-check"></i> تحديد الفرع المستلم</li>
-                        <li><i class="bi bi-check"></i> متابعة حالة المعاملة</li>
-                    </ul>
-                    <span class="service-link">ابدأ الآن <i class="bi bi-arrow-left"></i></span>
                 </a>
-
-                <a href="/transactions" class="service-card" style="text-decoration: none;">
-                    <div class="service-icon service-icon-gold">
-                        <i class="bi bi-file-earmark-text-fill"></i>
+                <a href="/transactions?status=today" class="stat-card stat-today">
+                    <div class="stat-icon"><i class="bi bi-calendar-check-fill"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_todayTransactions</span>
+                        <span class="stat-label">معاملات اليوم</span>
                     </div>
-                    <h3 class="service-title">إدارة المعاملات</h3>
-                    <p class="service-desc">عرض وإدارة جميع المعاملات الواردة والصادرة ومتابعة حالاتها</p>
-                    <ul class="service-features">
-                        <li><i class="bi bi-check"></i> فلترة حسب الحالة</li>
-                        <li><i class="bi bi-check"></i> بحث متقدم</li>
-                        <li><i class="bi bi-check"></i> تتبع سير المعاملة</li>
-                    </ul>
-                    <span class="service-link">عرض المعاملات <i class="bi bi-arrow-left"></i></span>
                 </a>
-
-                <a href="/branches" class="service-card" style="text-decoration: none;">
-                    <div class="service-icon service-icon-success">
-                        <i class="bi bi-building"></i>
+                <a href="/transactions?status=pending" class="stat-card stat-pending">
+                    <div class="stat-icon"><i class="bi bi-hourglass-split"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_pendingTransactions</span>
+                        <span class="stat-label">قيد المراجعة</span>
                     </div>
-                    <h3 class="service-title">الفروع والمكاتب</h3>
-                    <p class="service-desc">عرض الهيكل التنظيمي للفروع والمكاتب والإدارات</p>
-                    <ul class="service-features">
-                        <li><i class="bi bi-check"></i> الإدارة العامة</li>
-                        <li><i class="bi bi-check"></i> الفروع الرئيسية</li>
-                        <li><i class="bi bi-check"></i> المكاتب</li>
-                    </ul>
-                    <span class="service-link">عرض الفروع <i class="bi bi-arrow-left"></i></span>
                 </a>
-
-                <AuthorizeView Roles="SuperAdmin,ITAdmin">
-                    <a href="/users" class="service-card" style="text-decoration: none;">
-                        <div class="service-icon service-icon-info">
-                            <i class="bi bi-people-fill"></i>
-                        </div>
-                        <h3 class="service-title">إدارة المستخدمين</h3>
-                        <p class="service-desc">إدارة حسابات المستخدمين والصلاحيات والأدوار</p>
-                        <ul class="service-features">
-                            <li><i class="bi bi-check"></i> إضافة مستخدمين</li>
-                            <li><i class="bi bi-check"></i> تحديد الصلاحيات</li>
-                            <li><i class="bi bi-check"></i> إدارة الأدوار</li>
-                        </ul>
-                        <span class="service-link">إدارة المستخدمين <i class="bi bi-arrow-left"></i></span>
-                    </a>
-
-                    <a href="/audit-log" class="service-card" style="text-decoration: none;">
-                        <div class="service-icon service-icon-warning">
-                            <i class="bi bi-clipboard-data"></i>
-                        </div>
-                        <h3 class="service-title">سجل المراجعة</h3>
-                        <p class="service-desc">عرض سجل شامل لجميع العمليات والأنشطة في النظام</p>
-                        <ul class="service-features">
-                            <li><i class="bi bi-check"></i> تتبع العمليات</li>
-                            <li><i class="bi bi-check"></i> فلترة حسب التاريخ</li>
-                            <li><i class="bi bi-check"></i> مراقبة الأمان</li>
-                        </ul>
-                        <span class="service-link">عرض السجلات <i class="bi bi-arrow-left"></i></span>
-                    </a>
-                </AuthorizeView>
+                <a href="/transactions?priority=urgent" class="stat-card stat-urgent">
+                    <div class="stat-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_urgentTransactions</span>
+                        <span class="stat-label">عاجلة</span>
+                    </div>
+                </a>
+                <div class="stat-card stat-overdue">
+                    <div class="stat-icon"><i class="bi bi-clock-history"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_overdueTransactions</span>
+                        <span class="stat-label">متأخرة</span>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
-    <!-- Features Section -->
-    <section class="hb-features">
+    <!-- Quick Actions -->
+    <section class="quick-actions-section">
         <div class="container">
-            <h2 class="hb-section-title">لماذا تختار خدماتنا الإلكترونية؟</h2>
+            <h2 class="hb-section-title">إجراءات سريعة</h2>
+            <div class="actions-grid">
+                <a href="/transactions/create" class="action-card">
+                    <div class="action-icon action-icon-primary"><i class="bi bi-plus-circle-fill"></i></div>
+                    <h3>معاملة جديدة</h3>
+                    <p>إنشاء معاملة جديدة</p>
+                </a>
+                <a href="/transactions" class="action-card">
+                    <div class="action-icon action-icon-gold"><i class="bi bi-file-earmark-text-fill"></i></div>
+                    <h3>المعاملات</h3>
+                    <p>عرض وإدارة المعاملات</p>
+                </a>
+                <a href="/branches" class="action-card">
+                    <div class="action-icon action-icon-success"><i class="bi bi-building"></i></div>
+                    <h3>الفروع</h3>
+                    <p>إدارة الفروع والمكاتب</p>
+                </a>
+                <a href="/departments" class="action-card">
+                    <div class="action-icon action-icon-info"><i class="bi bi-diagram-3-fill"></i></div>
+                    <h3>الأقسام</h3>
+                    <p>إدارة الأقسام والإدارات</p>
+                </a>
+            </div>
+        </div>
+    </section>
 
-            <div class="features-grid">
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <i class="bi bi-shield-check"></i>
+    <!-- Status Breakdown + Recent Transactions -->
+    <section class="dashboard-content">
+        <div class="container">
+            <div class="content-grid">
+                <!-- Status Breakdown -->
+                <div class="status-breakdown-card hb-card">
+                    <h3 class="card-title"><i class="bi bi-pie-chart-fill"></i> توزيع الحالات</h3>
+                    <div class="status-bars">
+                        @foreach (var item in _statusBreakdown.OrderByDescending(x => x.Value))
+                        {
+                            var percent = _totalTransactions > 0 ? (double)item.Value / _totalTransactions * 100 : 0;
+                            <div class="status-bar-item">
+                                <div class="status-bar-header">
+                                    <span class="status-bar-label">@GetStatusLabel(item.Key)</span>
+                                    <span class="status-bar-count">@item.Value</span>
+                                </div>
+                                <div class="status-bar-track">
+                                    <div class="status-bar-fill @GetStatusBarClass(item.Key)" style="width: @percent.ToString("F0")%"></div>
+                                </div>
+                            </div>
+                        }
+                        @if (!_statusBreakdown.Any())
+                        {
+                            <div class="empty-status">
+                                <i class="bi bi-inbox"></i>
+                                <p>لا توجد معاملات بعد</p>
+                            </div>
+                        }
                     </div>
-                    <h4>أمان عالي</h4>
-                    <p>حماية بياناتك بأحدث تقنيات التشفير</p>
                 </div>
 
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <i class="bi bi-clock"></i>
+                <!-- Recent Transactions -->
+                <div class="recent-transactions-card hb-card">
+                    <div class="card-title-row">
+                        <h3 class="card-title"><i class="bi bi-clock-history"></i> آخر المعاملات</h3>
+                        <a href="/transactions" class="view-all-link">عرض الكل <i class="bi bi-arrow-left"></i></a>
                     </div>
-                    <h4>متاح 24/7</h4>
-                    <p>خدماتنا متاحة في أي وقت ومن أي مكان</p>
-                </div>
-
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <i class="bi bi-lightning-charge"></i>
-                    </div>
-                    <h4>سرعة في الإنجاز</h4>
-                    <p>معاملاتك فورية للمعاملات</p>
-                </div>
-
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <i class="bi bi-phone"></i>
-                    </div>
-                    <h4>سهولة الاستخدام</h4>
-                    <p>واجهة مستخدم بسيطة وسهلة على جميع الأجهزة</p>
+                    @if (_recentTransactions.Any())
+                    {
+                        <div class="recent-list">
+                            @foreach (var tx in _recentTransactions)
+                            {
+                                <a href="/transactions/@tx.Id" class="recent-item">
+                                    <div class="recent-item-icon">
+                                        <i class="bi @GetTypeIcon(tx.Type)"></i>
+                                    </div>
+                                    <div class="recent-item-info">
+                                        <span class="recent-item-ref">@tx.ReferenceNumber</span>
+                                        <span class="recent-item-subject">@tx.Subject</span>
+                                    </div>
+                                    <div class="recent-item-meta">
+                                        <span class="hb-badge-@GetStatusBadge(tx.Status)">@GetStatusLabel(tx.Status)</span>
+                                        <span class="recent-item-date">@tx.CreatedAt.ToString("MM/dd HH:mm")</span>
+                                    </div>
+                                </a>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-recent">
+                            <i class="bi bi-file-earmark-x"></i>
+                            <p>لا توجد معاملات حديثة</p>
+                        </div>
+                    }
                 </div>
             </div>
         </div>
     </section>
+
 </div>
+
+@code {
+    private int _totalTransactions, _todayTransactions, _pendingTransactions, _urgentTransactions, _overdueTransactions;
+    private Dictionary<TransactionStatus, int> _statusBreakdown = [];
+    private List<HBOperations.Domain.Entities.Transaction> _recentTransactions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var now = DateTime.UtcNow;
+        var transactions = DbContext.Transactions.AsNoTracking();
+
+        _totalTransactions = await transactions.CountAsync();
+        _todayTransactions = await transactions.CountAsync(t => t.CreatedAt.Date == now.Date);
+        _pendingTransactions = await transactions.CountAsync(t => t.Status == TransactionStatus.PendingReview);
+        _urgentTransactions = await transactions.CountAsync(t => t.Priority >= TransactionPriority.Urgent && t.Status != TransactionStatus.Archived && t.Status != TransactionStatus.Cancelled);
+        _overdueTransactions = await transactions.CountAsync(t => t.DueDate.HasValue && t.DueDate < now && t.Status != TransactionStatus.Archived && t.Status != TransactionStatus.Cancelled && t.Status != TransactionStatus.Confirmed);
+
+        _statusBreakdown = await transactions
+            .GroupBy(t => t.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Status, x => x.Count);
+
+        _recentTransactions = await transactions
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(8)
+            .ToListAsync();
+    }
+
+    private static string GetStatusLabel(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "مسودة",
+        TransactionStatus.PendingReview => "قيد المراجعة",
+        TransactionStatus.Approved => "معتمدة",
+        TransactionStatus.InTransit => "قيد التسليم",
+        TransactionStatus.Received => "مستلمة",
+        TransactionStatus.Confirmed => "مؤكدة",
+        TransactionStatus.Returned => "مرتجعة",
+        TransactionStatus.Disputed => "متنازع عليها",
+        TransactionStatus.Cancelled => "ملغاة",
+        TransactionStatus.Archived => "مؤرشفة",
+        _ => s.ToString()
+    };
+
+    private static string GetStatusBadge(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "secondary",
+        TransactionStatus.PendingReview => "warning",
+        TransactionStatus.Approved => "info",
+        TransactionStatus.InTransit => "primary",
+        TransactionStatus.Received => "success",
+        TransactionStatus.Confirmed => "success",
+        TransactionStatus.Returned => "danger",
+        TransactionStatus.Disputed => "danger",
+        TransactionStatus.Cancelled => "secondary",
+        TransactionStatus.Archived => "secondary",
+        _ => "secondary"
+    };
+
+    private static string GetStatusBarClass(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "bar-gray",
+        TransactionStatus.PendingReview => "bar-warning",
+        TransactionStatus.Approved => "bar-info",
+        TransactionStatus.InTransit => "bar-primary",
+        TransactionStatus.Received or TransactionStatus.Confirmed => "bar-success",
+        TransactionStatus.Returned or TransactionStatus.Disputed => "bar-danger",
+        _ => "bar-gray"
+    };
+
+    private static string GetTypeIcon(TransactionType t) => t switch
+    {
+        TransactionType.OutgoingFromHQ => "bi-arrow-up-left-circle",
+        TransactionType.IncomingToHQ => "bi-arrow-down-right-circle",
+        TransactionType.BranchToBranch => "bi-arrow-left-right",
+        TransactionType.CashTransfer => "bi-cash-stack",
+        TransactionType.DocumentDelivery => "bi-file-earmark-arrow-up",
+        _ => "bi-file-earmark-text"
+    };
+}

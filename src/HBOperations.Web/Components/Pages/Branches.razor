@@ -1,0 +1,157 @@
+@page "/branches"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using HBOperations.Application.Common.Interfaces
+@using HBOperations.Domain.Enums
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+
+<PageTitle>الفروع - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="page-title-section">
+        <div class="title-with-action">
+            <div>
+                <h1 class="section-title"><i class="bi bi-building"></i> الفروع والمكاتب</h1>
+                <p class="section-subtitle">الهيكل التنظيمي لفروع ومكاتب البنك</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="branch-stats">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="bi bi-bank2"></i></div>
+            <div class="stat-info">
+                <span class="stat-number">@_headOfficeCount</span>
+                <span class="stat-label">الإدارة العامة</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-gold"><i class="bi bi-building"></i></div>
+            <div class="stat-info">
+                <span class="stat-number">@_mainBranchCount</span>
+                <span class="stat-label">فروع رئيسية</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="bi bi-shop"></i></div>
+            <div class="stat-info">
+                <span class="stat-number">@_branchCount</span>
+                <span class="stat-label">فروع</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="bi bi-geo-alt"></i></div>
+            <div class="stat-info">
+                <span class="stat-number">@_officeCount</span>
+                <span class="stat-label">مكاتب</span>
+            </div>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="hb-loading">
+            <div class="hb-spinner"></div>
+            <span>جاري تحميل الفروع...</span>
+        </div>
+    }
+    else
+    {
+        <!-- Branch Table -->
+        <div class="table-container">
+            <table class="hb-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>اسم الفرع</th>
+                        <th>الكود</th>
+                        <th>النوع</th>
+                        <th>العنوان</th>
+                        <th>الهاتف</th>
+                        <th>الحالة</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var index = 0; }
+                    @foreach (var branch in _branches)
+                    {
+                        index++;
+                        <tr>
+                            <td>@index</td>
+                            <td class="branch-name">
+                                <i class="@GetBranchIcon(branch.BranchType)"></i>
+                                @branch.NameAr
+                            </td>
+                            <td><span class="code-badge">@branch.Code</span></td>
+                            <td>
+                                <span class="hb-badge @GetBranchTypeBadge(branch.BranchType)">
+                                    @GetBranchTypeLabel(branch.BranchType)
+                                </span>
+                            </td>
+                            <td>@(branch.Address ?? "—")</td>
+                            <td dir="ltr" style="text-align:center;">@(branch.Phone ?? "—")</td>
+                            <td>
+                                @if (branch.IsActive)
+                                {
+                                    <span class="hb-badge hb-badge-success">نشط</span>
+                                }
+                                else
+                                {
+                                    <span class="hb-badge hb-badge-danger">معطل</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<HBOperations.Domain.Entities.Branch> _branches = [];
+    private bool _loading = true;
+    private int _headOfficeCount, _mainBranchCount, _branchCount, _officeCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branches = await DbContext.Branches
+            .OrderBy(b => b.BranchType)
+            .ThenBy(b => b.NameAr)
+            .ToListAsync();
+
+        _headOfficeCount = _branches.Count(b => b.BranchType == BranchType.HeadOffice);
+        _mainBranchCount = _branches.Count(b => b.BranchType == BranchType.MainBranch);
+        _branchCount = _branches.Count(b => b.BranchType == BranchType.Branch);
+        _officeCount = _branches.Count(b => b.BranchType == BranchType.Office);
+        _loading = false;
+    }
+
+    private static string GetBranchTypeLabel(BranchType t) => t switch
+    {
+        BranchType.HeadOffice => "الإدارة العامة",
+        BranchType.MainBranch => "فرع رئيسي",
+        BranchType.Branch => "فرع",
+        BranchType.Office => "مكتب",
+        _ => t.ToString()
+    };
+
+    private static string GetBranchTypeBadge(BranchType t) => t switch
+    {
+        BranchType.HeadOffice => "hb-badge-primary",
+        BranchType.MainBranch => "hb-badge-gold",
+        BranchType.Branch => "hb-badge-success",
+        BranchType.Office => "hb-badge-secondary",
+        _ => ""
+    };
+
+    private static string GetBranchIcon(BranchType t) => t switch
+    {
+        BranchType.HeadOffice => "bi bi-bank2",
+        BranchType.MainBranch => "bi bi-building",
+        BranchType.Branch => "bi bi-shop",
+        BranchType.Office => "bi bi-geo-alt",
+        _ => "bi bi-building"
+    };
+}

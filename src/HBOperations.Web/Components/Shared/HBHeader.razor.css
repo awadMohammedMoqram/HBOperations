@@ -150,6 +150,22 @@
     margin-right: 0.5rem;
 }
 
+.notif-btn {
+    color: white;
+    font-size: 1.1rem;
+    text-decoration: none;
+    padding: 0.3rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+}
+
+.notif-btn:hover,
+.notif-btn.active {
+    color: #d4af37;
+}
+
 .user-name {
     color: #d4af37;
     font-size: 0.9rem;
