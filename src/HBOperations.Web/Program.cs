@@ -7,6 +7,7 @@ using HBOperations.Infrastructure.Data.Seed;
 using HBOperations.Web.Components;
 using HBOperations.Web.Hubs;
 using HBOperations.Web.Services;
+using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using System.Security.Claims;
@@ -31,7 +32,9 @@ try
         .AddInteractiveServerComponents();
 
     builder.Services.AddSignalR();
+    builder.Services.AddSingleton<NotificationEventService>();
     builder.Services.AddScoped<IRealTimeNotifier, SignalRNotifier>();
+    builder.Services.AddHostedService<AutoArchiveService>();
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddCascadingAuthenticationState();
 
@@ -160,6 +163,64 @@ try
         await db.SaveChangesAsync();
 
         return Results.Ok();
+    }).RequireAuthorization();
+
+    // Export branch report to Excel
+    app.MapGet("/api/reports/branches/export", async (IAppDbContext db) =>
+    {
+        var branches = await db.Branches.AsNoTracking()
+            .Where(b => b.IsActive).OrderBy(b => b.NameAr).ToListAsync();
+        var txList = await db.Transactions.AsNoTracking()
+            .Select(t => new { t.SenderBranchId, t.ReceiverBranchId, t.Status })
+            .ToListAsync();
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("تقرير الفروع");
+        ws.RightToLeft = true;
+
+        // Header
+        var headers = new[] { "الفرع", "الصادرة", "الواردة", "الإجمالي", "قيد المراجعة", "مكتملة", "ملغاة" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            ws.Cell(1, i + 1).Value = headers[i];
+            ws.Cell(1, i + 1).Style.Font.Bold = true;
+            ws.Cell(1, i + 1).Style.Fill.BackgroundColor = XLColor.FromArgb(0, 61, 122);
+            ws.Cell(1, i + 1).Style.Font.FontColor = XLColor.White;
+            ws.Cell(1, i + 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        }
+
+        int row = 2;
+        foreach (var b in branches)
+        {
+            var outgoing = txList.Count(t => t.SenderBranchId == b.Id);
+            var incoming = txList.Count(t => t.ReceiverBranchId == b.Id);
+            var pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.PendingReview);
+            var completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Confirmed || t.Status == TransactionStatus.Archived));
+            var cancelled = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Cancelled);
+            var total = outgoing + incoming;
+            if (total == 0) continue;
+
+            ws.Cell(row, 1).Value = b.NameAr;
+            ws.Cell(row, 2).Value = outgoing;
+            ws.Cell(row, 3).Value = incoming;
+            ws.Cell(row, 4).Value = total;
+            ws.Cell(row, 5).Value = pending;
+            ws.Cell(row, 6).Value = completed;
+            ws.Cell(row, 7).Value = cancelled;
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+        ws.Range(1, 1, row - 1, 7).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        ws.Range(1, 1, row - 1, 7).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+
+        var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+        ms.Position = 0;
+
+        return Results.File(ms,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"تقرير_الفروع_{DateTime.Now:yyyy-MM-dd}.xlsx");
     }).RequireAuthorization();
 
     app.MapStaticAssets();

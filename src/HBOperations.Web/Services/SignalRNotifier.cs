@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace HBOperations.Web.Services;
 
-public class SignalRNotifier(IHubContext<NotificationHub> hubContext) : IRealTimeNotifier
+public class SignalRNotifier(IHubContext<NotificationHub> hubContext, NotificationEventService eventService) : IRealTimeNotifier
 {
     public async Task SendToUserAsync(Guid userId, string title, string message, Guid? transactionId = null)
     {
@@ -16,6 +16,8 @@ public class SignalRNotifier(IHubContext<NotificationHub> hubContext) : IRealTim
                 TransactionId = transactionId,
                 Timestamp = DateTime.UtcNow
             });
+
+        await eventService.RaiseAsync(userId);
     }
 
     public async Task SendToAllAsync(string title, string message, Guid? transactionId = null)

@@ -1,7 +1,7 @@
 @* بنك حضرموت - Header Component *@
 @using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.AspNetCore.SignalR.Client
 @using HBOperations.Application.Common.Interfaces
+@using HBOperations.Web.Services
 @using Microsoft.EntityFrameworkCore
 @implements IAsyncDisposable
 
@@ -34,6 +34,12 @@
             <a href="/departments" class="nav-link @GetActiveClass("/departments")" @onclick="CloseMobileMenu">
                 <i class="bi bi-diagram-3"></i> الأقسام
             </a>
+            <a href="/reports" class="nav-link @GetActiveClass("/reports")" @onclick="CloseMobileMenu">
+                <i class="bi bi-graph-up"></i> التقارير
+            </a>
+            <a href="/archive" class="nav-link @GetActiveClass("/archive")" @onclick="CloseMobileMenu">
+                <i class="bi bi-archive"></i> الأرشيف
+            </a>
 
             <AuthorizeView Roles="SuperAdmin,ITAdmin">
                 <a href="/users" class="nav-link @GetActiveClass("/users")" @onclick="CloseMobileMenu">
@@ -41,6 +47,9 @@
                 </a>
                 <a href="/audit-log" class="nav-link @GetActiveClass("/audit-log")" @onclick="CloseMobileMenu">
                     <i class="bi bi-clipboard-data"></i> سجل المراجعة
+                </a>
+                <a href="/settings" class="nav-link @GetActiveClass("/settings")" @onclick="CloseMobileMenu">
+                    <i class="bi bi-gear-fill"></i> الإعدادات
                 </a>
             </AuthorizeView>
 
@@ -72,10 +81,10 @@
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private IAppDbContext DbContext { get; set; } = default!;
     [Inject] private ICurrentUserService CurrentUser { get; set; } = default!;
+    [Inject] private NotificationEventService NotificationEvents { get; set; } = default!;
 
     private bool isMobileMenuOpen;
     private int _unreadCount;
-    private HubConnection? _hubConnection;
 
     protected override async Task OnInitializedAsync()
     {
@@ -88,25 +97,16 @@
                 .CountAsync(n => n.UserId == CurrentUser.UserId && !n.IsRead);
         }
 
-        // Connect to SignalR
-        try
-        {
-            _hubConnection = new HubConnectionBuilder()
-                .WithUrl(Navigation.ToAbsoluteUri("/notificationhub"))
-                .WithAutomaticReconnect()
-                .Build();
+        // Subscribe to in-process notification events
+        NotificationEvents.OnNotification += OnNotificationReceived;
+    }
 
-            _hubConnection.On<object>("ReceiveNotification", _ =>
-            {
-                _unreadCount++;
-                InvokeAsync(StateHasChanged);
-            });
-
-            await _hubConnection.StartAsync();
-        }
-        catch
+    private async Task OnNotificationReceived(Guid userId)
+    {
+        if (userId == CurrentUser.UserId)
         {
-            // SignalR connection failed — notifications still work via DB
+            _unreadCount++;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -125,7 +125,6 @@
     public async ValueTask DisposeAsync()
     {
         Navigation.LocationChanged -= OnLocationChanged;
-        if (_hubConnection is not null)
-            await _hubConnection.DisposeAsync();
+        NotificationEvents.OnNotification -= OnNotificationReceived;
     }
 }

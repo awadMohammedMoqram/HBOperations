@@ -149,6 +149,7 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
 
         builder.HasIndex(n => new { n.UserId, n.IsRead });
         builder.HasIndex(n => n.CreatedAt);
+        builder.HasIndex(n => new { n.UserId, n.IsRead, n.CreatedAt });
 
         builder.HasOne(n => n.Transaction)
             .WithMany()
@@ -171,6 +172,23 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.HasIndex(a => new { a.EntityName, a.EntityId });
         builder.HasIndex(a => a.Timestamp);
         builder.HasIndex(a => a.UserId);
+        builder.HasIndex(a => new { a.Action, a.Timestamp });
+    }
+}
+
+public class SystemSettingConfiguration : IEntityTypeConfiguration<SystemSetting>
+{
+    public void Configure(EntityTypeBuilder<SystemSetting> builder)
+    {
+        builder.HasKey(s => s.Id);
+        builder.Property(s => s.Key).HasMaxLength(100).IsRequired();
+        builder.Property(s => s.Value).HasMaxLength(2000).IsRequired();
+        builder.Property(s => s.DescriptionAr).HasMaxLength(500);
+        builder.Property(s => s.Category).HasMaxLength(50).IsRequired();
+        builder.Property(s => s.ValueType).HasMaxLength(20).IsRequired();
+
+        builder.HasIndex(s => s.Key).IsUnique();
+        builder.HasIndex(s => s.Category);
     }
 }
 

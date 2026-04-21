@@ -1,0 +1,208 @@
+/* Settings Page */
+.page-container { padding: 1rem 0; }
+
+/* Category Tabs */
+.settings-tabs {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 1.5rem;
+    background: white;
+    border-radius: 12px;
+    padding: 0.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    flex-wrap: wrap;
+}
+
+.settings-tab {
+    padding: 0.65rem 1rem;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #6c757d;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+}
+
+.settings-tab:hover { background: #f8f9fa; color: #003d7a; }
+
+.settings-tab.active {
+    background: #003d7a;
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 61, 122, 0.3);
+}
+
+.settings-tab .tab-count {
+    font-size: 0.72rem;
+    background: rgba(0, 0, 0, 0.1);
+    padding: 0.1rem 0.45rem;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+.settings-tab.active .tab-count {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Settings Grid */
+.settings-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.setting-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1.1rem 1.5rem;
+    transition: all 0.2s;
+}
+
+.setting-card:hover { border-color: #003d7a; box-shadow: 0 2px 8px rgba(0, 61, 122, 0.06); }
+.setting-card.readonly { opacity: 0.7; background: #fafbfc; }
+
+.setting-info { flex: 1; }
+
+.setting-key {
+    display: block;
+    font-size: 0.78rem;
+    color: #6c757d;
+    font-family: monospace;
+    margin-bottom: 0.25rem;
+    direction: ltr;
+    text-align: right;
+}
+
+.setting-desc {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    font-size: 0.92rem;
+}
+
+.setting-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    margin-right: 2rem;
+}
+
+.setting-input {
+    padding: 0.5rem 0.8rem;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    width: 200px;
+    direction: ltr;
+    text-align: left;
+    transition: border-color 0.2s;
+}
+
+.setting-input:focus { border-color: #003d7a; outline: none; }
+
+.setting-input-num { width: 120px; }
+
+.setting-value-readonly {
+    padding: 0.5rem 0.8rem;
+    background: #f0f0f0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #555;
+    direction: ltr;
+}
+
+.lock-icon { color: #adb5bd; font-size: 0.85rem; }
+
+/* Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 26px;
+    cursor: pointer;
+}
+
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+.toggle-slider {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #ccc;
+    border-radius: 26px;
+    transition: 0.3s;
+}
+
+.toggle-slider::before {
+    content: "";
+    position: absolute;
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+
+.toggle-switch input:checked + .toggle-slider { background: #003d7a; }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(22px); }
+
+/* Save Bar */
+.save-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 2px solid #003d7a;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1000;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+    animation: slideUp 0.3s ease;
+}
+
+.changes-count {
+    font-weight: 600;
+    color: #d4af37;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.save-bar-actions { display: flex; gap: 0.75rem; }
+
+.hb-spinner-sm {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: inline-block;
+}
+
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .settings-tabs { flex-direction: column; }
+    .setting-card { flex-direction: column; gap: 1rem; align-items: flex-start; }
+    .setting-control { margin-right: 0; width: 100%; }
+    .setting-input { width: 100%; }
+    .save-bar { flex-direction: column; gap: 0.75rem; }
+}

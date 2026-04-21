@@ -13,5 +13,6 @@ public interface IAppDbContext
     DbSet<Department> Departments { get; }
     DbSet<Notification> Notifications { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<SystemSetting> SystemSettings { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

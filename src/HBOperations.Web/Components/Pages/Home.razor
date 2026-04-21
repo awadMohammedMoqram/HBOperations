@@ -169,11 +169,70 @@
         </div>
     </section>
 
+    <!-- Charts Row: Weekly Activity + Type Distribution -->
+    <section class="charts-section">
+        <div class="container">
+            <div class="content-grid">
+                <!-- Weekly Activity Chart (Last 7 days) -->
+                <div class="hb-card chart-card">
+                    <h3 class="card-title"><i class="bi bi-bar-chart-fill"></i> نشاط الأسبوع</h3>
+                    <div class="bar-chart">
+                        @{
+                            var maxDayCount = _weeklyData.Values.Any() ? _weeklyData.Values.Max() : 1;
+                        }
+                        @foreach (var day in _weeklyData)
+                        {
+                            var heightPercent = maxDayCount > 0 ? (double)day.Value / maxDayCount * 100 : 0;
+                            <div class="bar-column">
+                                <span class="bar-value">@day.Value</span>
+                                <div class="bar-fill-wrapper">
+                                    <div class="bar-fill" style="height: @heightPercent.ToString("F0")%"></div>
+                                </div>
+                                <span class="bar-label">@day.Key</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Type Distribution -->
+                <div class="hb-card chart-card">
+                    <h3 class="card-title"><i class="bi bi-diagram-3-fill"></i> توزيع الأنواع</h3>
+                    <div class="type-distribution">
+                        @foreach (var item in _typeBreakdown.OrderByDescending(x => x.Value))
+                        {
+                            var percent = _totalTransactions > 0 ? (double)item.Value / _totalTransactions * 100 : 0;
+                            <div class="type-item">
+                                <div class="type-icon-wrap @GetTypeColorClass(item.Key)">
+                                    <i class="bi @GetTypeIcon(item.Key)"></i>
+                                </div>
+                                <div class="type-details">
+                                    <div class="type-header">
+                                        <span class="type-name">@GetTypeLabel(item.Key)</span>
+                                        <span class="type-count">@item.Value <small>(@percent.ToString("F0")%)</small></span>
+                                    </div>
+                                    <div class="type-bar-track">
+                                        <div class="type-bar-fill @GetTypeColorClass(item.Key)" style="width: @percent.ToString("F0")%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        @if (!_typeBreakdown.Any())
+                        {
+                            <div class="empty-status"><i class="bi bi-inbox"></i><p>لا توجد بيانات</p></div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
 </div>
 
 @code {
     private int _totalTransactions, _todayTransactions, _pendingTransactions, _urgentTransactions, _overdueTransactions;
     private Dictionary<TransactionStatus, int> _statusBreakdown = [];
+    private Dictionary<TransactionType, int> _typeBreakdown = [];
+    private Dictionary<string, int> _weeklyData = [];
     private List<HBOperations.Domain.Entities.Transaction> _recentTransactions = [];
 
     protected override async Task OnInitializedAsync()
@@ -191,6 +250,29 @@
             .GroupBy(t => t.Status)
             .Select(g => new { Status = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Status, x => x.Count);
+
+        _typeBreakdown = await transactions
+            .GroupBy(t => t.Type)
+            .Select(g => new { Type = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Type, x => x.Count);
+
+        // Weekly data: last 7 days
+        var weekStart = now.Date.AddDays(-6);
+        var weeklyRaw = await transactions
+            .Where(t => t.CreatedAt >= weekStart)
+            .GroupBy(t => t.CreatedAt.Date)
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var dayNames = new[] { "أحد", "إثن", "ثلاث", "أربع", "خمس", "جمعة", "سبت" };
+        _weeklyData = new Dictionary<string, int>();
+        for (var i = 6; i >= 0; i--)
+        {
+            var date = now.Date.AddDays(-i);
+            var dayName = dayNames[(int)date.DayOfWeek];
+            var count = weeklyRaw.FirstOrDefault(x => x.Date == date)?.Count ?? 0;
+            _weeklyData[dayName] = count;
+        }
 
         _recentTransactions = await transactions
             .OrderByDescending(t => t.CreatedAt)
@@ -247,5 +329,28 @@
         TransactionType.CashTransfer => "bi-cash-stack",
         TransactionType.DocumentDelivery => "bi-file-earmark-arrow-up",
         _ => "bi-file-earmark-text"
+    };
+
+    private static string GetTypeLabel(TransactionType t) => t switch
+    {
+        TransactionType.OutgoingFromHQ => "صادر من الإدارة",
+        TransactionType.IncomingToHQ => "وارد للإدارة",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.InternalDepartment => "داخلي",
+        TransactionType.DocumentDelivery => "تسليم مستندات",
+        TransactionType.CashTransfer => "تحويل نقدي",
+        TransactionType.ReturnedItem => "مرتجع",
+        TransactionType.AuditRequest => "طلب تدقيق",
+        _ => t.ToString()
+    };
+
+    private static string GetTypeColorClass(TransactionType t) => t switch
+    {
+        TransactionType.OutgoingFromHQ => "type-color-primary",
+        TransactionType.IncomingToHQ => "type-color-gold",
+        TransactionType.BranchToBranch => "type-color-info",
+        TransactionType.CashTransfer => "type-color-success",
+        TransactionType.DocumentDelivery => "type-color-warning",
+        _ => "type-color-secondary"
     };
 }

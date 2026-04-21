@@ -25,6 +25,7 @@ public static class AppDbContextSeed
             var branches = await SeedBranchesAsync(context);
             var departments = await SeedDepartmentsAsync(context);
             await SeedUsersAsync(userManager, branches, departments);
+            await SeedSystemSettingsAsync(context);
             logger.LogInformation("Seed data completed successfully");
         }
         catch (Exception ex)
@@ -199,5 +200,29 @@ public static class AppDbContextSeed
             await userManager.CreateAsync(user, "Hb@2026pass");
             await userManager.AddToRoleAsync(user, role);
         }
+    }
+
+    private static async Task SeedSystemSettingsAsync(AppDbContext context)
+    {
+        if (await context.SystemSettings.AnyAsync()) return;
+
+        var settings = new SystemSetting[]
+        {
+            new() { Id = Guid.NewGuid(), Key = "AutoArchive.Enabled", Value = "true", DescriptionAr = "تفعيل الأرشفة التلقائية", Category = "Archive", ValueType = "bool" },
+            new() { Id = Guid.NewGuid(), Key = "AutoArchive.DaysAfterCompletion", Value = "90", DescriptionAr = "عدد الأيام بعد الإكمال للأرشفة التلقائية", Category = "Archive", ValueType = "int" },
+            new() { Id = Guid.NewGuid(), Key = "AutoArchive.RunTimeUtc", Value = "02:00", DescriptionAr = "وقت تشغيل الأرشفة التلقائية (UTC)", Category = "Archive", ValueType = "string" },
+            new() { Id = Guid.NewGuid(), Key = "Transaction.MaxDocuments", Value = "10", DescriptionAr = "الحد الأقصى لعدد المستندات لكل معاملة", Category = "Transaction", ValueType = "int" },
+            new() { Id = Guid.NewGuid(), Key = "Transaction.MaxFileSizeMB", Value = "50", DescriptionAr = "الحد الأقصى لحجم الملف (ميجابايت)", Category = "Transaction", ValueType = "int" },
+            new() { Id = Guid.NewGuid(), Key = "Transaction.DefaultPriority", Value = "0", DescriptionAr = "الأولوية الافتراضية للمعاملات الجديدة (0=عادية)", Category = "Transaction", ValueType = "int" },
+            new() { Id = Guid.NewGuid(), Key = "Notification.OverdueDays", Value = "3", DescriptionAr = "عدد أيام التأخير لتنبيه المتأخرات", Category = "Notification", ValueType = "int" },
+            new() { Id = Guid.NewGuid(), Key = "Notification.RetentionDays", Value = "180", DescriptionAr = "عدد أيام الاحتفاظ بالإشعارات", Category = "Notification", ValueType = "int" },
+            new() { Id = Guid.NewGuid(), Key = "System.BankNameAr", Value = "بنك حضرموت", DescriptionAr = "اسم البنك بالعربية", Category = "General", ValueType = "string", IsEditable = false },
+            new() { Id = Guid.NewGuid(), Key = "System.SessionTimeoutMinutes", Value = "480", DescriptionAr = "مدة الجلسة بالدقائق", Category = "Security", ValueType = "int" },
+            new() { Id = Guid.NewGuid(), Key = "System.MaxLoginAttempts", Value = "5", DescriptionAr = "الحد الأقصى لمحاولات تسجيل الدخول الفاشلة", Category = "Security", ValueType = "int", IsEditable = false },
+            new() { Id = Guid.NewGuid(), Key = "AuditLog.RetentionDays", Value = "365", DescriptionAr = "عدد أيام الاحتفاظ بسجل التدقيق", Category = "Audit", ValueType = "int" },
+        };
+
+        context.SystemSettings.AddRange(settings);
+        await context.SaveChangesAsync();
     }
 }

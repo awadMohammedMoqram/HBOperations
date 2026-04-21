@@ -58,6 +58,8 @@ public static class DependencyInjection
         services.AddScoped<IFileStorageService, LocalFileStorageService>();
         services.AddSingleton<IFileValidationService, FileValidationService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddMemoryCache();
+        services.AddScoped<ISystemSettingService, SystemSettingService>();
 
         return services;
     }

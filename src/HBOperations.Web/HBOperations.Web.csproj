@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.6" />
     <PackageReference Include="Microsoft.Build.Tasks.Core" Version="18.4.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0-preview.4.25258.110">
