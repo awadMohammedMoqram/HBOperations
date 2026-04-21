@@ -101,7 +101,6 @@ public class TransactionStateMachine
 
         transaction.History.Add(new TransactionHistory
         {
-            Id = Guid.NewGuid(),
             TransactionId = transaction.Id,
             FromStatus = oldStatus,
             ToStatus = newStatus,

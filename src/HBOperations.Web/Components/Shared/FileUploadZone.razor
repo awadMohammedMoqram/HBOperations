@@ -1,6 +1,6 @@
 @using Microsoft.AspNetCore.Components.Forms
-@inject HttpClient? Http
 @inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
 
 <div class="upload-zone @(_isDragging ? "dragging" : "")"
      @ondragenter="HandleDragEnter"
@@ -99,7 +99,14 @@
                 content.Add(streamContent, "file", file.Name);
 
                 var baseUri = Navigation.BaseUri.TrimEnd('/');
-                using var httpClient = new HttpClient();
+                var handler = new HttpClientHandler { UseCookies = true };
+                using var httpClient = new HttpClient(handler);
+                // Forward authentication cookies from the current request
+                var httpContext = HttpContextAccessor.HttpContext;
+                if (httpContext?.Request.Headers.ContainsKey("Cookie") == true)
+                {
+                    httpClient.DefaultRequestHeaders.Add("Cookie", httpContext.Request.Headers["Cookie"].ToString());
+                }
                 var response = await httpClient.PostAsync(
                     $"{baseUri}/api/documents/upload/{TransactionId}", content);
 

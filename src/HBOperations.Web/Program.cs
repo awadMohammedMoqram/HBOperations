@@ -3,6 +3,7 @@ using HBOperations.Application.Common.Interfaces;
 using HBOperations.Domain.Entities;
 using HBOperations.Domain.Enums;
 using HBOperations.Infrastructure;
+using HBOperations.Infrastructure.Data;
 using HBOperations.Infrastructure.Data.Seed;
 using HBOperations.Web.Components;
 using HBOperations.Web.Hubs;
@@ -56,7 +57,8 @@ try
     app.Use(async (context, next) =>
     {
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-        context.Response.Headers["X-Frame-Options"] = "DENY";
+        // SAMEORIGIN allows embedding in iframes from the same origin (needed for PDF preview)
+        context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
         context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
         context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
         context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
@@ -64,7 +66,7 @@ try
             "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; " +
             "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; " +
-            "img-src 'self' data:; connect-src 'self' ws: wss:; frame-src 'self';";
+            "img-src 'self' data:; connect-src 'self' ws: wss:; frame-src 'self'; object-src 'self';";
         await next();
     });
 

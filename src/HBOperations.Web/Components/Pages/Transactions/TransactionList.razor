@@ -258,8 +258,14 @@
     private string? _deleteError, _successMessage;
     private HBOperations.Domain.Entities.Transaction? _deletingTransaction;
 
+    [SupplyParameterFromQuery(Name = "success")]
+    public string? SuccessFromQuery { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (!string.IsNullOrEmpty(SuccessFromQuery))
+            _successMessage = SuccessFromQuery;
+
         await LoadTransactions();
     }
 

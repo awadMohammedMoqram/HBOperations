@@ -5,8 +5,9 @@
 @using HBOperations.Application.Workflow
 @using HBOperations.Domain.Enums
 @using HBOperations.Domain.Entities
+@using HBOperations.Infrastructure.Data
 @using Microsoft.EntityFrameworkCore
-@inject IAppDbContext DbContext
+@inject IDbContextFactory<AppDbContext> DbFactory
 @inject ICurrentUserService CurrentUser
 @inject INotificationService NotificationService
 @inject IEmailService EmailService
@@ -438,7 +439,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _transaction = await DbContext.Transactions
+        using var db = await DbFactory.CreateDbContextAsync();
+        _transaction = await db.Transactions
+            .AsNoTracking()
             .Include(t => t.SenderBranch)
             .Include(t => t.ReceiverBranch)
             .Include(t => t.SenderDepartment)
@@ -463,8 +466,27 @@
 
         try
         {
+            // Use a fresh DbContext for each operation (Blazor Server best practice)
+            using var db = await DbFactory.CreateDbContextAsync();
+
+            var fresh = await db.Transactions
+                .Include(t => t.SenderBranch)
+                .Include(t => t.ReceiverBranch)
+                .Include(t => t.SenderDepartment)
+                .Include(t => t.ReceiverDepartment)
+                .Include(t => t.Documents)
+                .Include(t => t.History)
+                .Include(t => t.Notes)
+                .FirstOrDefaultAsync(t => t.Id == _transaction.Id);
+
+            if (fresh is null)
+            {
+                _errorMessage = "المعاملة غير موجودة";
+                return;
+            }
+
             var result = _stateMachine.TransitionTo(
-                _transaction, targetStatus, CurrentUser.UserId, _actionNotes);
+                fresh, targetStatus, CurrentUser.UserId, _actionNotes);
 
             if (!result.IsSuccess)
             {
@@ -472,7 +494,10 @@
                 return;
             }
 
-            await DbContext.SaveChangesAsync();
+            await db.SaveChangesAsync();
+
+            // Update the display model (no-tracking copy)
+            _transaction = fresh;
             _successMessage = $"تم تنفيذ الإجراء: {GetActionLabel(targetStatus)}";
             _actionNotes = null;
             _allowedTransitions = _stateMachine.GetContextualTransitions(_transaction);
@@ -483,7 +508,6 @@
                 var title = $"تحديث المعاملة {_transaction.ReferenceNumber}";
                 var message = $"تم تغيير حالة المعاملة إلى: {GetStatusLabel(targetStatus)}";
 
-                // Notify the receiver user
                 if (_transaction.ReceiverUserId != CurrentUser.UserId)
                 {
                     await NotificationService.NotifyUserAsync(
@@ -491,7 +515,6 @@
                         Domain.Enums.NotificationType.TransactionStatusChanged);
                 }
 
-                // Notify the sender user
                 if (_transaction.SenderUserId != CurrentUser.UserId)
                 {
                     await NotificationService.NotifyUserAsync(
@@ -555,8 +578,9 @@
                 CreatedAt = DateTime.UtcNow
             };
             _transaction.Notes.Add(note);
-            DbContext.TransactionNotes.Add(note);
-            await DbContext.SaveChangesAsync();
+            using var db = await DbFactory.CreateDbContextAsync();
+            db.TransactionNotes.Add(note);
+            await db.SaveChangesAsync();
             _newNote = null;
         }
         catch (Exception ex)
@@ -701,7 +725,8 @@
     private async Task ReloadDocuments()
     {
         if (_transaction is null) return;
-        _transaction.Documents = await DbContext.TransactionDocuments
+        using var db = await DbFactory.CreateDbContextAsync();
+        _transaction.Documents = await db.TransactionDocuments
             .Where(d => d.TransactionId == _transaction.Id)
             .ToListAsync();
         StateHasChanged();
@@ -740,11 +765,12 @@
         if (_deleteDoc is null || _transaction is null) return;
         try
         {
-            var entity = await DbContext.TransactionDocuments.FindAsync(_deleteDoc.Id);
+            using var db = await DbFactory.CreateDbContextAsync();
+            var entity = await db.TransactionDocuments.FindAsync(_deleteDoc.Id);
             if (entity is not null)
             {
-                DbContext.TransactionDocuments.Remove(entity);
-                await DbContext.SaveChangesAsync();
+                db.TransactionDocuments.Remove(entity);
+                await db.SaveChangesAsync();
                 _transaction.Documents.Remove(_deleteDoc);
                 _successMessage = $"تم حذف المستند: {_deleteDoc.OriginalFileName}";
             }

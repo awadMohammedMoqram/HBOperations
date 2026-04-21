@@ -206,8 +206,8 @@
             DbContext.Transactions.Add(transaction);
             await DbContext.SaveChangesAsync();
 
-            _successMessage = $"تم إنشاء المعاملة بنجاح - رقم المرجع: {refNumber}";
-            _model = new();
+            Navigation.NavigateTo($"/transactions?success={Uri.EscapeDataString($"تم إنشاء المعاملة بنجاح - رقم المرجع: {refNumber}")}");
+            return;
         }
         catch (Exception ex)
         {
