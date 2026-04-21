@@ -1,0 +1,282 @@
+@page "/transactions/edit/{Id:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using HBOperations.Application.Common.Interfaces
+@using HBOperations.Domain.Entities
+@using HBOperations.Domain.Enums
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+@inject ICurrentUserService CurrentUser
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>تعديل المعاملة - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="page-title-section">
+        <div class="title-with-action">
+            <div>
+                <h1 class="section-title"><i class="bi bi-pencil-square"></i> تعديل المعاملة</h1>
+                <p class="section-subtitle">تعديل بيانات المعاملة @_transaction?.ReferenceNumber</p>
+            </div>
+            <button type="button" class="btn-hb-outline btn-back" @onclick="GoBack">
+                <i class="bi bi-arrow-right"></i> العودة
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="hb-alert hb-alert-success">
+            <i class="bi bi-check-circle-fill"></i> @_successMessage
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="hb-alert hb-alert-danger">
+            <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="hb-loading">
+            <div class="hb-spinner"></div>
+            <span>جاري التحميل...</span>
+        </div>
+    }
+    else if (_transaction == null)
+    {
+        <div class="hb-alert hb-alert-danger">
+            <i class="bi bi-exclamation-triangle-fill"></i> المعاملة غير موجودة
+        </div>
+    }
+    else
+    {
+        <div class="form-layout">
+            <div class="hb-card">
+                <div class="hb-card-header">
+                    <h2 class="hb-card-title"><i class="bi bi-file-earmark-text"></i> بيانات المعاملة</h2>
+                </div>
+
+                <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="EditTransaction">
+                    <div class="form-grid">
+                        <div class="hb-form-group full-width">
+                            <label class="hb-form-label">الموضوع *</label>
+                            <InputText @bind-Value="_model.Subject" class="hb-form-control" />
+                        </div>
+
+                        <div class="hb-form-group full-width">
+                            <label class="hb-form-label">الوصف</label>
+                            <InputTextArea @bind-Value="_model.Description" class="hb-form-control textarea" rows="3" />
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">نوع المعاملة *</label>
+                            <InputSelect @bind-Value="_model.Type" class="hb-form-control">
+                                @foreach (var type in Enum.GetValues<TransactionType>())
+                                {
+                                    <option value="@type">@GetTypeLabel(type)</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الأولوية *</label>
+                            <InputSelect @bind-Value="_model.Priority" class="hb-form-control">
+                                @foreach (var priority in Enum.GetValues<TransactionPriority>())
+                                {
+                                    <option value="@priority">@GetPriorityLabel(priority)</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الحالة</label>
+                            <InputSelect @bind-Value="_model.Status" class="hb-form-control">
+                                @foreach (var status in Enum.GetValues<TransactionStatus>())
+                                {
+                                    <option value="@status">@GetStatusLabel(status)</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الفرع المرسل</label>
+                            <InputSelect @bind-Value="_model.SenderBranchId" class="hb-form-control">
+                                <option value="">-- اختر الفرع --</option>
+                                @foreach (var branch in _branches)
+                                {
+                                    <option value="@branch.Id">@branch.NameAr</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الفرع المستلم</label>
+                            <InputSelect @bind-Value="_model.ReceiverBranchId" class="hb-form-control">
+                                <option value="">-- اختر الفرع --</option>
+                                @foreach (var branch in _branches)
+                                {
+                                    <option value="@branch.Id">@branch.NameAr</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">تاريخ الاستحقاق</label>
+                            <InputDate @bind-Value="_model.DueDate" class="hb-form-control" />
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-hb-primary" disabled="@_submitting">
+                            @if (_submitting)
+                            {
+                                <span class="hb-spinner" style="width:20px;height:20px;border-width:2px;"></span>
+                                <span>جاري الحفظ...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-check-lg"></i>
+                                <span>حفظ التغييرات</span>
+                            }
+                        </button>
+                        <a href="/transactions" class="btn-hb-outline">
+                            <i class="bi bi-x-lg"></i> إلغاء
+                        </a>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Transaction? _transaction;
+    private EditTransactionModel _model = new();
+    private List<Branch> _branches = [];
+    private bool _loading = true, _submitting;
+    private string? _successMessage, _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _transaction = await DbContext.Transactions.FindAsync(Id);
+
+        if (_transaction != null)
+        {
+            _model = new EditTransactionModel
+            {
+                Subject = _transaction.Subject,
+                Description = _transaction.Description,
+                Type = _transaction.Type,
+                Priority = _transaction.Priority,
+                Status = _transaction.Status,
+                SenderBranchId = _transaction.SenderBranchId?.ToString(),
+                ReceiverBranchId = _transaction.ReceiverBranchId?.ToString(),
+                DueDate = _transaction.DueDate
+            };
+        }
+
+        _branches = await DbContext.Branches
+            .Where(b => b.IsActive)
+            .OrderBy(b => b.NameAr)
+            .ToListAsync();
+
+        _loading = false;
+    }
+
+    private async Task GoBack()
+    {
+        await JS.InvokeVoidAsync("history.back");
+    }
+
+    private async Task HandleSubmit()
+    {
+        _submitting = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_model.Subject))
+            {
+                _errorMessage = "يرجى إدخال موضوع المعاملة";
+                return;
+            }
+
+            _transaction!.Subject = _model.Subject;
+            _transaction.Description = _model.Description;
+            _transaction.Type = _model.Type;
+            _transaction.Priority = _model.Priority;
+            _transaction.Status = _model.Status;
+            _transaction.SenderBranchId = string.IsNullOrEmpty(_model.SenderBranchId) ? null : Guid.Parse(_model.SenderBranchId);
+            _transaction.ReceiverBranchId = string.IsNullOrEmpty(_model.ReceiverBranchId) ? null : Guid.Parse(_model.ReceiverBranchId);
+            _transaction.DueDate = _model.DueDate;
+
+            DbContext.Transactions.Update(_transaction);
+            await DbContext.SaveChangesAsync();
+
+            _successMessage = "تم تحديث المعاملة بنجاح";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"حدث خطأ أثناء تحديث المعاملة: {ex.Message}";
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private static string GetTypeLabel(TransactionType t) => t switch
+    {
+        TransactionType.OutgoingFromHQ => "صادر من الإدارة",
+        TransactionType.IncomingToHQ => "وارد للإدارة",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.InternalDepartment => "داخلي",
+        TransactionType.DocumentDelivery => "تسليم مستندات",
+        TransactionType.CashTransfer => "تحويل نقدي",
+        TransactionType.ReturnedItem => "مرتجع",
+        TransactionType.AuditRequest => "طلب تدقيق",
+        _ => t.ToString()
+    };
+
+    private static string GetPriorityLabel(TransactionPriority p) => p switch
+    {
+        TransactionPriority.Normal => "عادية",
+        TransactionPriority.Important => "مهمة",
+        TransactionPriority.Urgent => "عاجلة",
+        TransactionPriority.Critical => "حرجة",
+        _ => p.ToString()
+    };
+
+    private static string GetStatusLabel(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Draft => "مسودة",
+        TransactionStatus.PendingReview => "قيد المراجعة",
+        TransactionStatus.Approved => "معتمدة",
+        TransactionStatus.InTransit => "قيد النقل",
+        TransactionStatus.Received => "مستلمة",
+        TransactionStatus.Confirmed => "مؤكدة",
+        TransactionStatus.Returned => "مرتجعة",
+        TransactionStatus.Disputed => "متنازع عليها",
+        TransactionStatus.Cancelled => "ملغاة",
+        TransactionStatus.Archived => "مؤرشفة",
+        _ => s.ToString()
+    };
+
+    private class EditTransactionModel
+    {
+        public string Subject { get; set; } = "";
+        public string? Description { get; set; }
+        public TransactionType Type { get; set; }
+        public TransactionPriority Priority { get; set; }
+        public TransactionStatus Status { get; set; }
+        public string? SenderBranchId { get; set; }
+        public string? ReceiverBranchId { get; set; }
+        public DateTime? DueDate { get; set; }
+    }
+}

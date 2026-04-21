@@ -23,11 +23,14 @@ public class LocalFileStorageService(IWebHostEnvironment environment) : IFileSto
             await stream.CopyToAsync(output, ct);
         }
 
-        // Compute SHA-256 checksum
-        stream.Position = 0;
-        using var sha = System.Security.Cryptography.SHA256.Create();
-        var hash = await sha.ComputeHashAsync(stream, ct);
-        var checksum = Convert.ToHexStringLower(hash);
+        // Compute SHA-256 checksum from the saved file (stream may not be seekable)
+        string checksum;
+        using (var fileRead = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+        {
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var hash = await sha.ComputeHashAsync(fileRead, ct);
+            checksum = Convert.ToHexStringLower(hash);
+        }
 
         var fileInfo = new FileInfo(filePath);
         var storagePath = Path.Combine(relativePath, storedFileName).Replace('\\', '/');

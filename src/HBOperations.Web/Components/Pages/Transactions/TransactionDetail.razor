@@ -1,10 +1,13 @@
 @page "/transactions/{Id:guid}"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using HBOperations.Application.Common.Interfaces
+@using HBOperations.Application.Workflow
 @using HBOperations.Domain.Enums
 @using HBOperations.Domain.Entities
 @using Microsoft.EntityFrameworkCore
 @inject IAppDbContext DbContext
+@inject ICurrentUserService CurrentUser
+@inject INotificationService NotificationService
 @inject NavigationManager Navigation
 
 <PageTitle>تفاصيل المعاملة - بنك حضرموت</PageTitle>
@@ -36,15 +39,81 @@
                     <p class="section-subtitle">@_transaction.Subject</p>
                 </div>
                 <div class="title-actions">
-                    <a href="/transactions" class="btn btn-outline"><i class="bi bi-arrow-right"></i> العودة</a>
+                    <a href="/transactions/edit/@_transaction.Id" class="btn-hb-outline"><i class="bi bi-pencil-square"></i> تعديل</a>
+                    <a href="/transactions" class="btn-hb-outline"><i class="bi bi-arrow-right"></i> العودة</a>
                 </div>
             </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <div class="hb-alert hb-alert-success">
+                <i class="bi bi-check-circle-fill"></i> @_successMessage
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="hb-alert hb-alert-danger">
+                <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+            </div>
+        }
+
+        <!-- Workflow Progress -->
+        <div class="workflow-progress">
+            @{
+                var mainSteps = new[] {
+                    TransactionStatus.Draft,
+                    TransactionStatus.PendingReview,
+                    TransactionStatus.Approved,
+                    TransactionStatus.InTransit,
+                    TransactionStatus.Received,
+                    TransactionStatus.Confirmed,
+                    TransactionStatus.Archived
+                };
+                var currentIndex = Array.IndexOf(mainSteps, _transaction.Status);
+                var isTerminal = _transaction.Status is TransactionStatus.Cancelled or TransactionStatus.Returned or TransactionStatus.Disputed;
+            }
+            @for (var i = 0; i < mainSteps.Length; i++)
+            {
+                var step = mainSteps[i];
+                var stepClass = "step-upcoming";
+                if (isTerminal && step == _transaction.Status) stepClass = "step-current";
+                else if (!isTerminal && i < currentIndex) stepClass = "step-completed";
+                else if (!isTerminal && i == currentIndex) stepClass = "step-current";
+
+                <div class="workflow-step @stepClass">
+                    <div class="step-dot">
+                        @if (stepClass == "step-completed")
+                        {
+                            <i class="bi bi-check-lg"></i>
+                        }
+                        else
+                        {
+                            <span>@(i + 1)</span>
+                        }
+                    </div>
+                    <span class="step-label">@GetStatusLabel(step)</span>
+                    @if (i < mainSteps.Length - 1)
+                    {
+                        <div class="step-line @(stepClass == "step-completed" ? "line-completed" : "")"></div>
+                    }
+                </div>
+            }
+            @if (isTerminal)
+            {
+                <div class="workflow-step step-terminal">
+                    <div class="step-dot">
+                        <i class="bi @GetStatusIcon(_transaction.Status)"></i>
+                    </div>
+                    <span class="step-label">@GetStatusLabel(_transaction.Status)</span>
+                </div>
+            }
         </div>
 
         <!-- Status Bar -->
         <div class="status-bar">
             <div class="status-current">
-                <span class="hb-badge-@GetStatusBadge(_transaction.Status) status-badge-lg">
+                <span class="status-badge-lg @GetStatusCssClass(_transaction.Status)">
                     <i class="bi @GetStatusIcon(_transaction.Status)"></i>
                     @GetStatusLabel(_transaction.Status)
                 </span>
@@ -61,6 +130,36 @@
                 }
             </div>
         </div>
+
+        <!-- Action Buttons -->
+        @if (_allowedTransitions.Any())
+        {
+            <div class="hb-card action-card">
+                <h3 class="card-section-title"><i class="bi bi-lightning-fill"></i> الإجراءات المتاحة</h3>
+                <div class="action-note-input">
+                    <label class="hb-form-label">ملاحظة الإجراء (اختياري)</label>
+                    <input type="text" class="hb-form-control" placeholder="أضف ملاحظة مع الإجراء..."
+                           @bind="_actionNotes" />
+                </div>
+                <div class="workflow-actions">
+                    @foreach (var target in _allowedTransitions)
+                    {
+                        <button class="workflow-btn @GetActionBtnClass(target)"
+                                @onclick="() => HandleTransition(target)" disabled="@_processing">
+                            @if (_processing)
+                            {
+                                <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span>
+                            }
+                            else
+                            {
+                                <i class="bi @GetStatusIcon(target)"></i>
+                            }
+                            @GetActionLabel(target)
+                        </button>
+                    }
+                </div>
+            </div>
+        }
 
         <!-- Info Cards Grid -->
         <div class="detail-grid">
@@ -141,10 +240,16 @@
         <!-- Documents -->
         <div class="hb-card detail-card">
             <h3 class="card-section-title"><i class="bi bi-paperclip"></i> المستندات (@_transaction.Documents.Count)</h3>
+            
+            <!-- Upload Zone -->
+            <HBOperations.Web.Components.Shared.FileUploadZone 
+                TransactionId="@_transaction.Id" 
+                OnUploadCompleted="ReloadDocuments" />
+
             @if (_transaction.Documents.Any())
             {
                 <div class="documents-list">
-                    @foreach (var doc in _transaction.Documents)
+                    @foreach (var doc in _transaction.Documents.OrderByDescending(d => d.UploadedAt))
                     {
                         <div class="doc-item">
                             <div class="doc-icon"><i class="bi bi-file-earmark-pdf"></i></div>
@@ -153,15 +258,65 @@
                                 <span class="doc-meta">@GetDocTypeName(doc.DocumentType) — @FormatFileSize(doc.FileSizeBytes) — v@(doc.Version)</span>
                             </div>
                             <span class="doc-date">@doc.UploadedAt.ToString("yyyy/MM/dd")</span>
+                            <div class="doc-actions">
+                                <button class="doc-action-btn" title="معاينة" @onclick="() => PreviewDocument(doc.Id)">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <a href="/api/documents/@doc.Id/download" target="_blank" class="doc-action-btn" title="تحميل">
+                                    <i class="bi bi-download"></i>
+                                </a>
+                                <button class="doc-action-btn doc-action-delete" title="حذف" @onclick="() => OpenDeleteDocModal(doc)">
+                                    <i class="bi bi-trash3"></i>
+                                </button>
+                            </div>
                         </div>
                     }
                 </div>
             }
             else
             {
-                <p class="empty-text">لا توجد مستندات مرفقة</p>
+                <p class="empty-text">لا توجد مستندات مرفقة — استخدم منطقة الرفع أعلاه</p>
             }
         </div>
+
+        <!-- PDF Preview Modal -->
+        @if (_previewDocId.HasValue)
+        {
+            <div class="modal-overlay" @onclick="ClosePreview">
+                <div class="modal-content pdf-modal" @onclick:stopPropagation="true">
+                    <div class="modal-header">
+                        <h3><i class="bi bi-file-earmark-pdf"></i> معاينة المستند</h3>
+                        <button class="modal-close" @onclick="ClosePreview"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                    <div class="modal-body pdf-body">
+                        <iframe src="/api/documents/@_previewDocId/preview" class="pdf-frame"></iframe>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Delete Document Confirmation Modal -->
+        @if (_deleteDoc is not null)
+        {
+            <div class="modal-overlay" @onclick="() => _deleteDoc = null">
+                <div class="modal-content" @onclick:stopPropagation="true">
+                    <div class="modal-header">
+                        <h3><i class="bi bi-trash3"></i> حذف مستند</h3>
+                        <button class="modal-close" @onclick="() => _deleteDoc = null"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>هل أنت متأكد من حذف المستند <strong>@_deleteDoc.OriginalFileName</strong>؟</p>
+                        <p class="text-muted">لا يمكن التراجع عن هذا الإجراء.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-hb-outline" @onclick="() => _deleteDoc = null">إلغاء</button>
+                        <button class="btn-hb-danger" @onclick="DeleteDocument">
+                            <i class="bi bi-trash3"></i> حذف
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
 
         <!-- History Timeline -->
         <div class="hb-card detail-card">
@@ -179,9 +334,9 @@
                                     <span class="timeline-date">@h.PerformedAt.ToString("yyyy/MM/dd HH:mm")</span>
                                 </div>
                                 <div class="timeline-status">
-                                    <span class="hb-badge-@GetStatusBadge(h.FromStatus)">@GetStatusLabel(h.FromStatus)</span>
+                                    <span class="status-mini @GetStatusCssClass(h.FromStatus)">@GetStatusLabel(h.FromStatus)</span>
                                     <i class="bi bi-arrow-left"></i>
-                                    <span class="hb-badge-@GetStatusBadge(h.ToStatus)">@GetStatusLabel(h.ToStatus)</span>
+                                    <span class="status-mini @GetStatusCssClass(h.ToStatus)">@GetStatusLabel(h.ToStatus)</span>
                                 </div>
                                 @if (!string.IsNullOrEmpty(h.Notes))
                                 {
@@ -201,6 +356,19 @@
         <!-- Notes -->
         <div class="hb-card detail-card">
             <h3 class="card-section-title"><i class="bi bi-chat-left-text"></i> الملاحظات (@_transaction.Notes.Count)</h3>
+
+            <!-- Add Note Form -->
+            <div class="add-note-form">
+                <div class="note-input-row">
+                    <input type="text" class="hb-form-control" placeholder="اكتب ملاحظة..."
+                           @bind="_newNote" @onkeydown="HandleNoteKeyDown" />
+                    <button class="btn-hb-primary btn-add-note" @onclick="AddNote"
+                            disabled="@(string.IsNullOrWhiteSpace(_newNote))">
+                        <i class="bi bi-send"></i>
+                    </button>
+                </div>
+            </div>
+
             @if (_transaction.Notes.Any())
             {
                 <div class="notes-list">
@@ -229,6 +397,14 @@
 
     private Transaction? _transaction;
     private bool _loading = true;
+    private bool _processing;
+    private string? _successMessage, _errorMessage;
+    private string? _actionNotes;
+    private string? _newNote;
+    private IReadOnlyCollection<TransactionStatus> _allowedTransitions = [];
+    private readonly TransactionStateMachine _stateMachine = new();
+    private Guid? _previewDocId;
+    private TransactionDocument? _deleteDoc;
 
     protected override async Task OnInitializedAsync()
     {
@@ -240,11 +416,129 @@
             .Include(t => t.Documents)
             .Include(t => t.History)
             .Include(t => t.Notes)
-            .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == Id);
+
+        if (_transaction != null)
+            _allowedTransitions = _stateMachine.GetAllowedTransitions(_transaction.Status);
 
         _loading = false;
     }
+
+    private async Task HandleTransition(TransactionStatus targetStatus)
+    {
+        if (_transaction is null) return;
+        _processing = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var result = _stateMachine.TransitionTo(
+                _transaction, targetStatus, CurrentUser.UserId, _actionNotes);
+
+            if (!result.IsSuccess)
+            {
+                _errorMessage = result.Error;
+                return;
+            }
+
+            await DbContext.SaveChangesAsync();
+            _successMessage = $"تم تنفيذ الإجراء: {GetActionLabel(targetStatus)}";
+            _actionNotes = null;
+            _allowedTransitions = _stateMachine.GetAllowedTransitions(_transaction.Status);
+
+            // Send notification to involved users
+            try
+            {
+                var title = $"تحديث المعاملة {_transaction.ReferenceNumber}";
+                var message = $"تم تغيير حالة المعاملة إلى: {GetStatusLabel(targetStatus)}";
+
+                // Notify the receiver user
+                if (_transaction.ReceiverUserId != CurrentUser.UserId)
+                {
+                    await NotificationService.NotifyUserAsync(
+                        _transaction.ReceiverUserId, title, message, _transaction.Id);
+                }
+
+                // Notify the sender user
+                if (_transaction.SenderUserId != CurrentUser.UserId)
+                {
+                    await NotificationService.NotifyUserAsync(
+                        _transaction.SenderUserId, title, message, _transaction.Id);
+                }
+            }
+            catch
+            {
+                // Notification failure should not block the transition
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"حدث خطأ: {ex.Message}";
+        }
+        finally
+        {
+            _processing = false;
+        }
+    }
+
+    private async Task AddNote()
+    {
+        if (_transaction is null || string.IsNullOrWhiteSpace(_newNote)) return;
+        try
+        {
+            var note = new TransactionNote
+            {
+                Id = Guid.NewGuid(),
+                TransactionId = _transaction.Id,
+                Content = _newNote,
+                UserId = CurrentUser.UserId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _transaction.Notes.Add(note);
+            DbContext.TransactionNotes.Add(note);
+            await DbContext.SaveChangesAsync();
+            _newNote = null;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"خطأ في إضافة الملاحظة: {ex.Message}";
+        }
+    }
+
+    private async Task HandleNoteKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_newNote))
+            await AddNote();
+    }
+
+    private static string GetActionLabel(TransactionStatus to) => to switch
+    {
+        TransactionStatus.PendingReview => "إرسال للمراجعة",
+        TransactionStatus.Approved => "اعتماد",
+        TransactionStatus.InTransit => "إرسال",
+        TransactionStatus.Received => "تأكيد الاستلام",
+        TransactionStatus.Confirmed => "تأكيد نهائي",
+        TransactionStatus.Returned => "إرجاع",
+        TransactionStatus.Disputed => "فتح نزاع",
+        TransactionStatus.Cancelled => "إلغاء",
+        TransactionStatus.Archived => "أرشفة",
+        TransactionStatus.Draft => "إعادة كمسودة",
+        _ => to.ToString()
+    };
+
+    private static string GetActionBtnClass(TransactionStatus to) => to switch
+    {
+        TransactionStatus.PendingReview or TransactionStatus.Approved or TransactionStatus.InTransit
+            => "workflow-btn-primary",
+        TransactionStatus.Received or TransactionStatus.Confirmed or TransactionStatus.Archived
+            => "workflow-btn-success",
+        TransactionStatus.Returned or TransactionStatus.Cancelled
+            => "workflow-btn-danger",
+        TransactionStatus.Disputed => "workflow-btn-warning",
+        TransactionStatus.Draft => "workflow-btn-secondary",
+        _ => ""
+    };
 
     private static string GetStatusLabel(TransactionStatus s) => s switch
     {
@@ -261,15 +555,19 @@
         _ => s.ToString()
     };
 
-    private static string GetStatusBadge(TransactionStatus s) => s switch
+    private static string GetStatusCssClass(TransactionStatus s) => s switch
     {
-        TransactionStatus.Draft => "secondary",
-        TransactionStatus.PendingReview => "warning",
-        TransactionStatus.Approved => "info",
-        TransactionStatus.InTransit => "primary",
-        TransactionStatus.Received or TransactionStatus.Confirmed => "success",
-        TransactionStatus.Returned or TransactionStatus.Disputed => "danger",
-        _ => "secondary"
+        TransactionStatus.Draft => "status-draft",
+        TransactionStatus.PendingReview => "status-pending",
+        TransactionStatus.Approved => "status-approved",
+        TransactionStatus.InTransit => "status-transit",
+        TransactionStatus.Received => "status-received",
+        TransactionStatus.Confirmed => "status-confirmed",
+        TransactionStatus.Returned => "status-returned",
+        TransactionStatus.Disputed => "status-disputed",
+        TransactionStatus.Cancelled => "status-cancelled",
+        TransactionStatus.Archived => "status-archived",
+        _ => ""
     };
 
     private static string GetStatusIcon(TransactionStatus s) => s switch
@@ -335,5 +633,53 @@
         if (bytes < 1024) return $"{bytes} B";
         if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
         return $"{bytes / (1024.0 * 1024):F1} MB";
+    }
+
+    private async Task ReloadDocuments()
+    {
+        if (_transaction is null) return;
+        _transaction.Documents = await DbContext.TransactionDocuments
+            .Where(d => d.TransactionId == _transaction.Id)
+            .ToListAsync();
+        StateHasChanged();
+    }
+
+    private void PreviewDocument(Guid docId)
+    {
+        _previewDocId = docId;
+    }
+
+    private void ClosePreview()
+    {
+        _previewDocId = null;
+    }
+
+    private void OpenDeleteDocModal(TransactionDocument doc)
+    {
+        _deleteDoc = doc;
+    }
+
+    private async Task DeleteDocument()
+    {
+        if (_deleteDoc is null || _transaction is null) return;
+        try
+        {
+            var entity = await DbContext.TransactionDocuments.FindAsync(_deleteDoc.Id);
+            if (entity is not null)
+            {
+                DbContext.TransactionDocuments.Remove(entity);
+                await DbContext.SaveChangesAsync();
+                _transaction.Documents.Remove(_deleteDoc);
+                _successMessage = $"تم حذف المستند: {_deleteDoc.OriginalFileName}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"خطأ في حذف المستند: {ex.Message}";
+        }
+        finally
+        {
+            _deleteDoc = null;
+        }
     }
 }

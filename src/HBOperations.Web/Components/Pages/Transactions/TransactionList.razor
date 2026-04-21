@@ -90,6 +90,13 @@
         </div>
     </div>
 
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="hb-alert hb-alert-success">
+            <i class="bi bi-check-circle-fill"></i> @_successMessage
+        </div>
+    }
+
     <!-- Table -->
     @if (_loading)
     {
@@ -149,17 +156,87 @@
                             </td>
                             <td class="date-cell">@t.CreatedAt.ToString("yyyy/MM/dd")</td>
                             <td>
-                                <a href="/transactions/@t.Id" class="action-btn" title="عرض التفاصيل">
-                                    <i class="bi bi-eye"></i>
-                                </a>
+                                <div class="action-buttons">
+                                    <a href="/transactions/@t.Id" class="action-btn view" title="عرض التفاصيل">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="/transactions/edit/@t.Id" class="action-btn edit" title="تعديل">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </a>
+                                    <button class="action-btn delete" title="حذف" @onclick="() => OpenDeleteModal(t)">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
+
+        @* Pagination *@
+        @if (_totalPages > 1)
+        {
+            <div class="pagination-container">
+                <div class="pagination-info">
+                    عرض @((_currentPage - 1) * _pageSize + 1) - @Math.Min(_currentPage * _pageSize, _filteredCount) من @_filteredCount
+                </div>
+                <div class="pagination-controls">
+                    <button class="page-btn" disabled="@(_currentPage <= 1)" @onclick="() => GoToPage(1)">
+                        <i class="bi bi-chevron-double-right"></i>
+                    </button>
+                    <button class="page-btn" disabled="@(_currentPage <= 1)" @onclick="() => GoToPage(_currentPage - 1)">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                    @foreach (var p in GetPageNumbers())
+                    {
+                        <button class="page-btn @(p == _currentPage ? "active" : "")" @onclick="() => GoToPage(p)">@p</button>
+                    }
+                    <button class="page-btn" disabled="@(_currentPage >= _totalPages)" @onclick="() => GoToPage(_currentPage + 1)">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <button class="page-btn" disabled="@(_currentPage >= _totalPages)" @onclick="() => GoToPage(_totalPages)">
+                        <i class="bi bi-chevron-double-left"></i>
+                    </button>
+                </div>
+            </div>
+        }
     }
 </div>
+
+@* ===== Delete Confirmation Modal ===== *@
+@if (_showDeleteModal)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-content modal-sm" @onclick:stopPropagation="true">
+            <div class="modal-header modal-header-danger">
+                <h3><i class="bi bi-exclamation-triangle"></i> تأكيد الحذف</h3>
+                <button class="modal-close" @onclick="CloseDeleteModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(_deleteError))
+                {
+                    <div class="hb-alert hb-alert-danger" style="margin-bottom:1rem;">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @_deleteError
+                    </div>
+                }
+                <p class="delete-message">هل أنت متأكد من حذف المعاملة <strong>@_deletingTransaction?.ReferenceNumber</strong>؟</p>
+                <p class="delete-subject">@_deletingTransaction?.Subject</p>
+                <p class="delete-warning"><i class="bi bi-info-circle"></i> سيتم حذف جميع المستندات والملاحظات المرتبطة بها.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-hb-danger" @onclick="HandleDelete" disabled="@_deleting">
+                    @if (_deleting)
+                    {
+                        <span class="hb-spinner" style="width:18px;height:18px;border-width:2px;"></span>
+                    }
+                    <i class="bi bi-trash3"></i> حذف
+                </button>
+                <button class="btn-hb-outline" @onclick="CloseDeleteModal">إلغاء</button>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     private List<HBOperations.Domain.Entities.Transaction> _transactions = [];
@@ -169,8 +246,22 @@
     private string _typeFilter = "";
     private string _priorityFilter = "";
     private int _totalCount, _pendingCount, _inTransitCount, _completedCount;
+    private int _currentPage = 1;
+    private int _pageSize = 15;
+    private int _filteredCount;
+    private int _totalPages;
+
+    // Delete modal state
+    private bool _showDeleteModal, _deleting;
+    private string? _deleteError, _successMessage;
+    private HBOperations.Domain.Entities.Transaction? _deletingTransaction;
 
     protected override async Task OnInitializedAsync()
+    {
+        await LoadTransactions();
+    }
+
+    private async Task LoadTransactions()
     {
         _transactions = await DbContext.Transactions
             .Include(t => t.SenderBranch)
@@ -184,6 +275,34 @@
         _completedCount = _transactions.Count(t => t.Status is TransactionStatus.Confirmed or TransactionStatus.Archived);
         _loading = false;
     }
+
+    private void OpenDeleteModal(HBOperations.Domain.Entities.Transaction tx)
+    {
+        _deletingTransaction = tx;
+        _deleteError = null;
+        _showDeleteModal = true;
+    }
+
+    private async Task HandleDelete()
+    {
+        _deleting = true;
+        _deleteError = null;
+        try
+        {
+            DbContext.Transactions.Remove(_deletingTransaction!);
+            await DbContext.SaveChangesAsync();
+            _successMessage = $"تم حذف المعاملة «{_deletingTransaction!.ReferenceNumber}» بنجاح";
+            _showDeleteModal = false;
+            await LoadTransactions();
+        }
+        catch (Exception ex)
+        {
+            _deleteError = $"حدث خطأ: {ex.Message}";
+        }
+        finally { _deleting = false; }
+    }
+
+    private void CloseDeleteModal() { _showDeleteModal = false; _deleteError = null; }
 
     private IEnumerable<HBOperations.Domain.Entities.Transaction> GetFilteredTransactions()
     {
@@ -202,7 +321,25 @@
         if (Enum.TryParse<TransactionPriority>(_priorityFilter, out var priority))
             query = query.Where(t => t.Priority == priority);
 
-        return query;
+        var filtered = query.ToList();
+        _filteredCount = filtered.Count;
+        _totalPages = (int)Math.Ceiling((double)_filteredCount / _pageSize);
+        if (_currentPage > _totalPages && _totalPages > 0) _currentPage = _totalPages;
+
+        return filtered.Skip((_currentPage - 1) * _pageSize).Take(_pageSize);
+    }
+
+    private void GoToPage(int page)
+    {
+        _currentPage = Math.Max(1, Math.Min(page, _totalPages));
+    }
+
+    private IEnumerable<int> GetPageNumbers()
+    {
+        var start = Math.Max(1, _currentPage - 2);
+        var end = Math.Min(_totalPages, start + 4);
+        start = Math.Max(1, end - 4);
+        return Enumerable.Range(start, end - start + 1);
     }
 
     private static string GetStatusLabel(TransactionStatus s) => s switch

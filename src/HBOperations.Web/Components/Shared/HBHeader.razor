@@ -1,6 +1,9 @@
 @* بنك حضرموت - Header Component *@
 @using Microsoft.AspNetCore.Components.Authorization
-@implements IDisposable
+@using Microsoft.AspNetCore.SignalR.Client
+@using HBOperations.Application.Common.Interfaces
+@using Microsoft.EntityFrameworkCore
+@implements IAsyncDisposable
 
 <header class="hb-header" dir="rtl">
     <div class="header-content">
@@ -46,6 +49,10 @@
                     <div class="user-section">
                         <a href="/notifications" class="notif-btn @GetActiveClass("/notifications")" @onclick="CloseMobileMenu" title="الإشعارات">
                             <i class="bi bi-bell"></i>
+                            @if (_unreadCount > 0)
+                            {
+                                <span class="notif-badge">@(_unreadCount > 99 ? "99+" : _unreadCount.ToString())</span>
+                            }
                         </a>
                         <span class="user-name">@(context.User.FindFirst("FullNameAr")?.Value ?? context.User.Identity?.Name ?? "مستخدم")</span>
                         <form method="post" action="/logout">
@@ -63,12 +70,44 @@
 
 @code {
     [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private IAppDbContext DbContext { get; set; } = default!;
+    [Inject] private ICurrentUserService CurrentUser { get; set; } = default!;
 
     private bool isMobileMenuOpen;
+    private int _unreadCount;
+    private HubConnection? _hubConnection;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         Navigation.LocationChanged += OnLocationChanged;
+
+        // Load unread count from DB
+        if (CurrentUser.UserId != Guid.Empty)
+        {
+            _unreadCount = await DbContext.Notifications
+                .CountAsync(n => n.UserId == CurrentUser.UserId && !n.IsRead);
+        }
+
+        // Connect to SignalR
+        try
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/notificationhub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<object>("ReceiveNotification", _ =>
+            {
+                _unreadCount++;
+                InvokeAsync(StateHasChanged);
+            });
+
+            await _hubConnection.StartAsync();
+        }
+        catch
+        {
+            // SignalR connection failed — notifications still work via DB
+        }
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
@@ -83,5 +122,10 @@
             : currentPath.StartsWith(path, StringComparison.OrdinalIgnoreCase) ? "active" : "";
     }
 
-    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+    public async ValueTask DisposeAsync()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        if (_hubConnection is not null)
+            await _hubConnection.DisposeAsync();
+    }
 }
