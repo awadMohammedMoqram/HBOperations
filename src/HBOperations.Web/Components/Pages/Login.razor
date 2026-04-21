@@ -91,6 +91,20 @@
 
         if (result.Succeeded)
         {
+            // Check password expiry (90 days) and force-change flag
+            var user = await SignInManager.UserManager.FindByEmailAsync(_model.Email);
+            if (user is not null)
+            {
+                user.LastLoginAt = DateTime.UtcNow;
+                await SignInManager.UserManager.UpdateAsync(user);
+
+                if (user.ForcePasswordChange ||
+                    (user.PasswordChangedAt.HasValue && user.PasswordChangedAt.Value.AddDays(90) < DateTime.UtcNow))
+                {
+                    Navigation.NavigateTo($"/change-password?expired=true", forceLoad: true);
+                    return;
+                }
+            }
             Navigation.NavigateTo("/", forceLoad: true);
             return;
         }
@@ -98,6 +112,11 @@
         if (result.IsLockedOut)
         {
             _errorMessage = "تم قفل الحساب مؤقتاً بسبب محاولات تسجيل دخول متعددة. حاول مرة أخرى بعد 15 دقيقة.";
+        }
+        else if (result.RequiresTwoFactor)
+        {
+            Navigation.NavigateTo($"/login-2fa?rememberMe={_model.RememberMe}", forceLoad: true);
+            return;
         }
         else
         {

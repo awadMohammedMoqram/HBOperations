@@ -1,6 +1,6 @@
 @page "/users"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "SuperAdmin,ITAdmin")]
 @using HBOperations.Application.Common.Interfaces
 @using HBOperations.Infrastructure.Identity
 @using Microsoft.AspNetCore.Identity

@@ -33,6 +33,12 @@ public class Transaction : BaseEntity, IHasTimestamps
 
     public Guid CreatedByUserId { get; set; }
 
+    // Dual Approval (for Critical priority)
+    public Guid? FirstApprovedByUserId { get; set; }
+    public DateTime? FirstApprovedAt { get; set; }
+    public Guid? SecondApprovedByUserId { get; set; }
+    public DateTime? SecondApprovedAt { get; set; }
+
     // Navigation
     public Branch? SenderBranch { get; set; }
     public Branch? ReceiverBranch { get; set; }

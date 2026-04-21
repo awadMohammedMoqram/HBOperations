@@ -7,6 +7,7 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @inject IAppDbContext DbContext
+@inject ICurrentUserService CurrentUser
 @inject UserManager<ApplicationUser> UserManager
 @inject NavigationManager Navigation
 
@@ -264,9 +265,30 @@
 
     private async Task LoadTransactions()
     {
-        _transactions = await DbContext.Transactions
+        // Global roles see all transactions; others see only their branch/department
+        var globalRoles = new[] { "SuperAdmin", "CEO", "Auditor", "ComplianceOfficer", "ITAdmin" };
+        var hasGlobalAccess = globalRoles.Any(r => CurrentUser.IsInRole(r));
+
+        IQueryable<HBOperations.Domain.Entities.Transaction> query = DbContext.Transactions
             .Include(t => t.SenderBranch)
-            .Include(t => t.ReceiverBranch)
+            .Include(t => t.ReceiverBranch);
+
+        if (!hasGlobalAccess)
+        {
+            var branchId = CurrentUser.BranchId;
+            var deptId = CurrentUser.DepartmentId;
+            var userId = CurrentUser.UserId;
+
+            // AssistantCEO sees their department's transactions
+            query = query.Where(t =>
+                t.CreatedByUserId == userId ||
+                t.SenderUserId == userId ||
+                t.ReceiverUserId == userId ||
+                (branchId != null && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
+                (deptId != null && (t.SenderDepartmentId == deptId || t.ReceiverDepartmentId == deptId)));
+        }
+
+        _transactions = await query
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
 

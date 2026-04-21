@@ -10,7 +10,8 @@ public class TransactionStateMachine
         AllowedTransitions = new()
         {
             [TransactionStatus.Draft] = [TransactionStatus.PendingReview, TransactionStatus.Cancelled],
-            [TransactionStatus.PendingReview] = [TransactionStatus.Approved, TransactionStatus.Returned, TransactionStatus.Cancelled],
+            [TransactionStatus.PendingReview] = [TransactionStatus.Approved, TransactionStatus.PendingSecondApproval, TransactionStatus.Returned, TransactionStatus.Cancelled],
+            [TransactionStatus.PendingSecondApproval] = [TransactionStatus.Approved, TransactionStatus.Returned, TransactionStatus.Cancelled],
             [TransactionStatus.Approved] = [TransactionStatus.InTransit],
             [TransactionStatus.InTransit] = [TransactionStatus.Received, TransactionStatus.Returned],
             [TransactionStatus.Received] = [TransactionStatus.Confirmed, TransactionStatus.Disputed, TransactionStatus.Returned],
@@ -33,11 +34,53 @@ public class TransactionStateMachine
             : Array.Empty<TransactionStatus>().AsReadOnly();
     }
 
+    /// <summary>
+    /// Get filtered transitions based on transaction context (e.g., hide PendingSecondApproval for non-critical)
+    /// </summary>
+    public IReadOnlyCollection<TransactionStatus> GetContextualTransitions(Transaction transaction)
+    {
+        var transitions = GetAllowedTransitions(transaction.Status).ToList();
+
+        // For PendingReview: if Critical, show PendingSecondApproval instead of Approved
+        if (transaction.Status == TransactionStatus.PendingReview)
+        {
+            if (transaction.Priority == TransactionPriority.Critical)
+            {
+                transitions.Remove(TransactionStatus.Approved);
+            }
+            else
+            {
+                transitions.Remove(TransactionStatus.PendingSecondApproval);
+            }
+        }
+
+        return transitions.AsReadOnly();
+    }
+
     public Result TransitionTo(Transaction transaction, TransactionStatus newStatus,
         Guid userId, string? notes = null, string? ipAddress = null)
     {
         if (!CanTransition(transaction.Status, newStatus))
             return Result.Failure($"لا يمكن الانتقال من {transaction.Status} إلى {newStatus}");
+
+        // Dual approval for Critical: PendingReview → PendingSecondApproval (first approval)
+        if (transaction.Status == TransactionStatus.PendingReview &&
+            newStatus == TransactionStatus.PendingSecondApproval)
+        {
+            transaction.FirstApprovedByUserId = userId;
+            transaction.FirstApprovedAt = DateTime.UtcNow;
+        }
+
+        // Second approval: PendingSecondApproval → Approved
+        if (transaction.Status == TransactionStatus.PendingSecondApproval &&
+            newStatus == TransactionStatus.Approved)
+        {
+            if (userId == transaction.FirstApprovedByUserId)
+                return Result.Failure("لا يمكن للمعتمد الأول أن يكون نفسه المعتمد الثاني");
+
+            transaction.SecondApprovedByUserId = userId;
+            transaction.SecondApprovedAt = DateTime.UtcNow;
+        }
 
         var oldStatus = transaction.Status;
         transaction.Status = newStatus;
@@ -75,6 +118,7 @@ public class TransactionStateMachine
     private static string GetActionName(TransactionStatus to) => to switch
     {
         TransactionStatus.PendingReview => "تم الإرسال للمراجعة",
+        TransactionStatus.PendingSecondApproval => "تم الاعتماد الأول (بانتظار الاعتماد الثاني)",
         TransactionStatus.Approved => "تم الاعتماد",
         TransactionStatus.InTransit => "تم الإرسال",
         TransactionStatus.Received => "تم الاستلام",

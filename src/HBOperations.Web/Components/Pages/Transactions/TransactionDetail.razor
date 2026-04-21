@@ -9,6 +9,7 @@
 @inject IAppDbContext DbContext
 @inject ICurrentUserService CurrentUser
 @inject INotificationService NotificationService
+@inject IEmailService EmailService
 @inject NavigationManager Navigation
 
 <PageTitle>تفاصيل المعاملة - بنك حضرموت</PageTitle>
@@ -283,14 +284,41 @@
         <!-- PDF Preview Modal -->
         @if (_previewDocId.HasValue)
         {
-            <div class="modal-overlay" @onclick="ClosePreview">
-                <div class="modal-content pdf-modal" @onclick:stopPropagation="true">
-                    <div class="modal-header">
-                        <h3><i class="bi bi-file-earmark-pdf"></i> معاينة المستند</h3>
-                        <button class="modal-close" @onclick="ClosePreview"><i class="bi bi-x-lg"></i></button>
+            var previewDoc = _transaction?.Documents.FirstOrDefault(d => d.Id == _previewDocId);
+            <div class="modal-overlay" @onclick="ClosePreview" @onkeydown="HandlePreviewKeyDown" tabindex="0">
+                <div class="modal-content pdf-modal @(_pdfFullscreen ? "pdf-fullscreen" : "")" @onclick:stopPropagation="true">
+                    <div class="modal-header pdf-header">
+                        <div class="pdf-header-info">
+                            <i class="bi bi-file-earmark-pdf pdf-icon-lg"></i>
+                            <div>
+                                <h3>@(previewDoc?.OriginalFileName ?? "معاينة المستند")</h3>
+                                @if (previewDoc is not null)
+                                {
+                                    <span class="pdf-meta-text">@GetDocTypeName(previewDoc.DocumentType) — @FormatFileSize(previewDoc.FileSizeBytes) — الإصدار @(previewDoc.Version)</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="pdf-toolbar">
+                            <a href="/api/documents/@_previewDocId/download" target="_blank" class="pdf-tool-btn" title="تحميل الملف">
+                                <i class="bi bi-download"></i>
+                            </a>
+                            <a href="/api/documents/@_previewDocId/preview" target="_blank" class="pdf-tool-btn" title="فتح في نافذة جديدة">
+                                <i class="bi bi-box-arrow-up-left"></i>
+                            </a>
+                            <button class="pdf-tool-btn" @onclick="TogglePdfFullscreen" title="@(_pdfFullscreen ? "تصغير" : "ملء الشاشة")">
+                                <i class="bi @(_pdfFullscreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                            </button>
+                            <button class="modal-close" @onclick="ClosePreview" title="إغلاق (Esc)">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="modal-body pdf-body">
-                        <iframe src="/api/documents/@_previewDocId/preview" class="pdf-frame"></iframe>
+                        <div class="pdf-loading-overlay" id="pdfLoader">
+                            <div class="hb-spinner"></div>
+                            <span>جاري تحميل المستند...</span>
+                        </div>
+                        <iframe src="/api/documents/@_previewDocId/preview" class="pdf-frame" onload="document.getElementById('pdfLoader').style.display='none'"></iframe>
                     </div>
                 </div>
             </div>
@@ -405,6 +433,7 @@
     private IReadOnlyCollection<TransactionStatus> _allowedTransitions = [];
     private readonly TransactionStateMachine _stateMachine = new();
     private Guid? _previewDocId;
+    private bool _pdfFullscreen;
     private TransactionDocument? _deleteDoc;
 
     protected override async Task OnInitializedAsync()
@@ -420,7 +449,7 @@
             .FirstOrDefaultAsync(t => t.Id == Id);
 
         if (_transaction != null)
-            _allowedTransitions = _stateMachine.GetAllowedTransitions(_transaction.Status);
+            _allowedTransitions = _stateMachine.GetContextualTransitions(_transaction);
 
         _loading = false;
     }
@@ -446,7 +475,7 @@
             await DbContext.SaveChangesAsync();
             _successMessage = $"تم تنفيذ الإجراء: {GetActionLabel(targetStatus)}";
             _actionNotes = null;
-            _allowedTransitions = _stateMachine.GetAllowedTransitions(_transaction.Status);
+            _allowedTransitions = _stateMachine.GetContextualTransitions(_transaction);
 
             // Send notification to involved users
             try
@@ -458,19 +487,48 @@
                 if (_transaction.ReceiverUserId != CurrentUser.UserId)
                 {
                     await NotificationService.NotifyUserAsync(
-                        _transaction.ReceiverUserId, title, message, _transaction.Id);
+                        _transaction.ReceiverUserId, title, message, _transaction.Id,
+                        Domain.Enums.NotificationType.TransactionStatusChanged);
                 }
 
                 // Notify the sender user
                 if (_transaction.SenderUserId != CurrentUser.UserId)
                 {
                     await NotificationService.NotifyUserAsync(
-                        _transaction.SenderUserId, title, message, _transaction.Id);
+                        _transaction.SenderUserId, title, message, _transaction.Id,
+                        Domain.Enums.NotificationType.TransactionStatusChanged);
                 }
             }
             catch
             {
                 // Notification failure should not block the transition
+            }
+
+            // Send email for Urgent/Critical transactions
+            if (_transaction.Priority is TransactionPriority.Urgent or TransactionPriority.Critical)
+            {
+                try
+                {
+                    var emailSubject = $"[{GetPriorityLabel(_transaction.Priority)}] تحديث المعاملة {_transaction.ReferenceNumber}";
+                    var emailBody = $"""
+                        <div dir="rtl" style="font-family:Tajawal,sans-serif;">
+                            <h2 style="color:#003d7a;">تحديث معاملة {GetPriorityLabel(_transaction.Priority)}</h2>
+                            <p><strong>المرجع:</strong> {_transaction.ReferenceNumber}</p>
+                            <p><strong>الموضوع:</strong> {_transaction.Subject}</p>
+                            <p><strong>الحالة الجديدة:</strong> {GetStatusLabel(targetStatus)}</p>
+                            <hr/>
+                            <p style="color:#666;">نظام عمليات بنك حضرموت</p>
+                        </div>
+                        """;
+                    if (_transaction.ReceiverUserId != CurrentUser.UserId)
+                        await EmailService.SendToUserAsync(_transaction.ReceiverUserId, emailSubject, emailBody);
+                    if (_transaction.SenderUserId != CurrentUser.UserId)
+                        await EmailService.SendToUserAsync(_transaction.SenderUserId, emailSubject, emailBody);
+                }
+                catch
+                {
+                    // Email failure should not block the transition
+                }
             }
         }
         catch (Exception ex)
@@ -516,6 +574,7 @@
     private static string GetActionLabel(TransactionStatus to) => to switch
     {
         TransactionStatus.PendingReview => "إرسال للمراجعة",
+        TransactionStatus.PendingSecondApproval => "اعتماد أول (توقيع مزدوج)",
         TransactionStatus.Approved => "اعتماد",
         TransactionStatus.InTransit => "إرسال",
         TransactionStatus.Received => "تأكيد الاستلام",
@@ -530,7 +589,7 @@
 
     private static string GetActionBtnClass(TransactionStatus to) => to switch
     {
-        TransactionStatus.PendingReview or TransactionStatus.Approved or TransactionStatus.InTransit
+        TransactionStatus.PendingReview or TransactionStatus.PendingSecondApproval or TransactionStatus.Approved or TransactionStatus.InTransit
             => "workflow-btn-primary",
         TransactionStatus.Received or TransactionStatus.Confirmed or TransactionStatus.Archived
             => "workflow-btn-success",
@@ -546,6 +605,7 @@
         TransactionStatus.Draft => "مسودة",
         TransactionStatus.PendingReview => "قيد المراجعة",
         TransactionStatus.Approved => "معتمدة",
+        TransactionStatus.PendingSecondApproval => "بانتظار الاعتماد الثاني",
         TransactionStatus.InTransit => "قيد التسليم",
         TransactionStatus.Received => "مستلمة",
         TransactionStatus.Confirmed => "مؤكدة",
@@ -561,6 +621,7 @@
         TransactionStatus.Draft => "status-draft",
         TransactionStatus.PendingReview => "status-pending",
         TransactionStatus.Approved => "status-approved",
+        TransactionStatus.PendingSecondApproval => "status-pending",
         TransactionStatus.InTransit => "status-transit",
         TransactionStatus.Received => "status-received",
         TransactionStatus.Confirmed => "status-confirmed",
@@ -576,6 +637,7 @@
         TransactionStatus.Draft => "bi-pencil",
         TransactionStatus.PendingReview => "bi-hourglass-split",
         TransactionStatus.Approved => "bi-check-circle",
+        TransactionStatus.PendingSecondApproval => "bi-person-check",
         TransactionStatus.InTransit => "bi-truck",
         TransactionStatus.Received => "bi-inbox",
         TransactionStatus.Confirmed => "bi-check2-all",
@@ -648,11 +710,24 @@
     private void PreviewDocument(Guid docId)
     {
         _previewDocId = docId;
+        _pdfFullscreen = false;
     }
 
     private void ClosePreview()
     {
         _previewDocId = null;
+        _pdfFullscreen = false;
+    }
+
+    private void TogglePdfFullscreen()
+    {
+        _pdfFullscreen = !_pdfFullscreen;
+    }
+
+    private void HandlePreviewKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") ClosePreview();
+        if (e.Key == "f" || e.Key == "F") TogglePdfFullscreen();
     }
 
     private void OpenDeleteDocModal(TransactionDocument doc)

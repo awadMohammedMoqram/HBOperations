@@ -1,6 +1,6 @@
 @page "/transactions/create"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "SuperAdmin,DepartmentManager,BranchManager,OfficeManager,DepartmentStaff,BranchStaff")]
 @using HBOperations.Application.Common.Interfaces
 @using HBOperations.Domain.Entities
 @using HBOperations.Domain.Enums
@@ -173,7 +173,18 @@
                 return;
             }
 
-            var refNumber = $"TXN-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString()[..6].ToUpper()}";
+            // Generate sequential reference: HB-YYYYMM-XXXXX
+            var now = DateTime.UtcNow;
+            var prefix = $"HB-{now:yyyyMM}-";
+            var lastRef = await DbContext.Transactions
+                .Where(t => t.ReferenceNumber.StartsWith(prefix))
+                .OrderByDescending(t => t.ReferenceNumber)
+                .Select(t => t.ReferenceNumber)
+                .FirstOrDefaultAsync();
+            var seq = 1;
+            if (lastRef is not null && int.TryParse(lastRef[prefix.Length..], out var lastSeq))
+                seq = lastSeq + 1;
+            var refNumber = $"{prefix}{seq:D5}";
 
             var transaction = new Transaction
             {

@@ -28,7 +28,7 @@ public static class DependencyInjection
                 options.Password.RequireLowercase = true;
                 options.Password.RequireUppercase = true;
                 options.Password.RequireNonAlphanumeric = true;
-                options.Password.RequiredLength = 8;
+                options.Password.RequiredLength = 12;
 
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
                 options.Lockout.MaxFailedAccessAttempts = 5;
@@ -39,7 +39,14 @@ public static class DependencyInjection
             })
             .AddEntityFrameworkStores<AppDbContext>()
             .AddDefaultTokenProviders()
+            .AddTokenProvider<DataProtectorTokenProvider<ApplicationUser>>("Default")
             .AddClaimsPrincipalFactory<CustomClaimsPrincipalFactory>();
+
+        // MFA: enable two-factor sign-in (users can opt in)
+        services.Configure<IdentityOptions>(options =>
+        {
+            options.Tokens.AuthenticatorTokenProvider = TokenOptions.DefaultAuthenticatorProvider;
+        });
 
         services.ConfigureApplicationCookie(options =>
         {
@@ -55,9 +62,17 @@ public static class DependencyInjection
         // Services
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IAuditService, AuditService>();
-        services.AddScoped<IFileStorageService, AzureBlobStorageService>();
+
+        // File storage: Azure Blob if configured, otherwise Local
+        var azureConn = configuration.GetSection("AzureBlobStorage:ConnectionString").Value;
+        if (!string.IsNullOrWhiteSpace(azureConn) && azureConn != "UseDevelopmentStorage=true")
+            services.AddScoped<IFileStorageService, AzureBlobStorageService>();
+        else
+            services.AddScoped<IFileStorageService, LocalFileStorageService>();
+
         services.AddSingleton<IFileValidationService, FileValidationService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IEmailService, SmtpEmailService>();
         services.AddMemoryCache();
         services.AddScoped<ISystemSettingService, SystemSettingService>();
 

@@ -11,7 +11,8 @@ public enum TransactionStatus
     Returned = 6,
     Disputed = 7,
     Cancelled = 8,
-    Archived = 9
+    Archived = 9,
+    PendingSecondApproval = 10
 }
 
 public enum TransactionType

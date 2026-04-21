@@ -261,7 +261,26 @@
     protected override async Task OnInitializedAsync()
     {
         var now = DateTime.UtcNow;
-        var transactions = DbContext.Transactions.AsNoTracking();
+
+        // Global roles see all; others see only their branch/department
+        var globalRoles = new[] { "SuperAdmin", "CEO", "Auditor", "ComplianceOfficer", "ITAdmin" };
+        var hasGlobalAccess = globalRoles.Any(r => CurrentUser.IsInRole(r));
+
+        IQueryable<HBOperations.Domain.Entities.Transaction> transactions = DbContext.Transactions.AsNoTracking();
+
+        if (!hasGlobalAccess)
+        {
+            var branchId = CurrentUser.BranchId;
+            var deptId = CurrentUser.DepartmentId;
+            var userId = CurrentUser.UserId;
+
+            transactions = transactions.Where(t =>
+                t.CreatedByUserId == userId ||
+                t.SenderUserId == userId ||
+                t.ReceiverUserId == userId ||
+                (branchId != null && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
+                (deptId != null && (t.SenderDepartmentId == deptId || t.ReceiverDepartmentId == deptId)));
+        }
 
         _totalTransactions = await transactions.CountAsync();
         _todayTransactions = await transactions.CountAsync(t => t.CreatedAt.Date == now.Date);

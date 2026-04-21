@@ -12,6 +12,8 @@ public class ApplicationUser : IdentityUser<Guid>
     public bool IsActive { get; set; } = true;
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? PasswordChangedAt { get; set; }
+    public bool ForcePasswordChange { get; set; }
 }
 
 public class ApplicationRole : IdentityRole<Guid>

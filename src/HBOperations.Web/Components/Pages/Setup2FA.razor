@@ -1,0 +1,156 @@
+@page "/setup-2fa"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Identity
+@using HBOperations.Application.Common.Interfaces
+@using HBOperations.Infrastructure.Identity
+@inject UserManager<ApplicationUser> UserManager
+@inject ICurrentUserService CurrentUser
+@inject NavigationManager Navigation
+
+<PageTitle>إعداد التحقق بخطوتين - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="hb-card" style="max-width:600px; margin:40px auto; padding:2rem;">
+        <h2 style="color:var(--hb-primary); margin-bottom:1.5rem;">
+            <i class="bi bi-shield-lock"></i> التحقق بخطوتين (MFA)
+        </h2>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert-hb alert-danger"><i class="bi bi-x-circle"></i> @_errorMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <div class="alert-hb alert-success"><i class="bi bi-check-circle"></i> @_successMessage</div>
+        }
+
+        @if (_loading)
+        {
+            <div class="hb-loading"><div class="hb-spinner"></div></div>
+        }
+        else if (_is2faEnabled)
+        {
+            <div style="text-align:center; padding:2rem 0;">
+                <i class="bi bi-shield-check" style="font-size:3rem; color:var(--hb-success);"></i>
+                <p style="font-size:1.1rem; margin-top:1rem;">التحقق بخطوتين <strong>مفعّل</strong></p>
+                <button class="btn-hb-danger" style="margin-top:1rem;" @onclick="Disable2FA" disabled="@_processing">
+                    <i class="bi bi-shield-x"></i> تعطيل التحقق بخطوتين
+                </button>
+            </div>
+        }
+        else if (string.IsNullOrEmpty(_sharedKey))
+        {
+            <p style="margin-bottom:1rem;">قم بتفعيل التحقق بخطوتين لتأمين حسابك بشكل إضافي.</p>
+            <button class="btn-hb-primary" @onclick="GenerateKey" disabled="@_processing">
+                <i class="bi bi-qr-code"></i> بدء الإعداد
+            </button>
+        }
+        else
+        {
+            <div style="margin-bottom:1.5rem;">
+                <p>1. ثبّت تطبيق مصادقة مثل <strong>Google Authenticator</strong> أو <strong>Microsoft Authenticator</strong>.</p>
+                <p>2. أدخل المفتاح التالي في التطبيق يدوياً:</p>
+                <div style="background:var(--hb-bg-alt); padding:1rem; border-radius:8px; text-align:center; font-family:monospace; font-size:1.2rem; letter-spacing:0.3rem; margin:1rem 0; direction:ltr;">
+                    @_sharedKey
+                </div>
+                <p>3. أدخل رمز التحقق المكون من 6 أرقام من التطبيق:</p>
+            </div>
+
+            <div class="hb-form-group" style="margin-bottom:1rem;">
+                <input type="text" class="hb-form-control" style="text-align:center; font-size:1.3rem; letter-spacing:0.4rem; max-width:250px; margin:0 auto;"
+                       @bind="_verificationCode" maxlength="6" placeholder="000000" />
+            </div>
+            <div style="text-align:center;">
+                <button class="btn-hb-primary" @onclick="VerifyAndEnable" disabled="@_processing">
+                    <i class="bi bi-check-circle"></i> تحقق وتفعيل
+                </button>
+            </div>
+        }
+
+        <div style="margin-top:2rem; text-align:center;">
+            <a href="/" style="color:var(--hb-primary);"><i class="bi bi-arrow-right"></i> العودة للرئيسية</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _loading = true;
+    private bool _processing;
+    private bool _is2faEnabled;
+    private string? _sharedKey;
+    private string? _verificationCode;
+    private string? _errorMessage;
+    private string? _successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await UserManager.FindByIdAsync(CurrentUser.UserId.ToString());
+        if (user is not null)
+            _is2faEnabled = await UserManager.GetTwoFactorEnabledAsync(user);
+        _loading = false;
+    }
+
+    private async Task GenerateKey()
+    {
+        _processing = true;
+        var user = await UserManager.FindByIdAsync(CurrentUser.UserId.ToString());
+        if (user is null) return;
+
+        await UserManager.ResetAuthenticatorKeyAsync(user);
+        var key = await UserManager.GetAuthenticatorKeyAsync(user);
+        _sharedKey = FormatKey(key!);
+        _processing = false;
+    }
+
+    private async Task VerifyAndEnable()
+    {
+        _processing = true;
+        _errorMessage = null;
+
+        var user = await UserManager.FindByIdAsync(CurrentUser.UserId.ToString());
+        if (user is null) return;
+
+        var code = _verificationCode?.Replace(" ", "").Replace("-", "") ?? "";
+        var isValid = await UserManager.VerifyTwoFactorTokenAsync(
+            user, UserManager.Options.Tokens.AuthenticatorTokenProvider, code);
+
+        if (isValid)
+        {
+            await UserManager.SetTwoFactorEnabledAsync(user, true);
+            _is2faEnabled = true;
+            _sharedKey = null;
+            _successMessage = "تم تفعيل التحقق بخطوتين بنجاح!";
+        }
+        else
+        {
+            _errorMessage = "رمز التحقق غير صحيح. تأكد من إدخال الرمز الصحيح من التطبيق.";
+        }
+
+        _processing = false;
+    }
+
+    private async Task Disable2FA()
+    {
+        _processing = true;
+        var user = await UserManager.FindByIdAsync(CurrentUser.UserId.ToString());
+        if (user is null) return;
+
+        await UserManager.SetTwoFactorEnabledAsync(user, false);
+        _is2faEnabled = false;
+        _successMessage = "تم تعطيل التحقق بخطوتين.";
+        _processing = false;
+    }
+
+    private static string FormatKey(string key)
+    {
+        var result = new System.Text.StringBuilder();
+        for (int i = 0; i < key.Length; i++)
+        {
+            if (i > 0 && i % 4 == 0)
+                result.Append(' ');
+            result.Append(key[i]);
+        }
+        return result.ToString();
+    }
+}

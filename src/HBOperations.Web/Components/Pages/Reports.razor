@@ -1,6 +1,6 @@
 @page "/reports"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "SuperAdmin,CEO,AssistantCEO,DepartmentManager,BranchManager,OfficeManager,Auditor,ComplianceOfficer,ITAdmin")]
 @using HBOperations.Application.Common.Interfaces
 @using HBOperations.Domain.Enums
 @using HBOperations.Domain.Entities

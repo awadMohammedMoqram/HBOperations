@@ -13,7 +13,8 @@ public class NotificationService(
     UserManager<ApplicationUser> userManager,
     IRealTimeNotifier realTimeNotifier) : INotificationService
 {
-    public async Task NotifyUserAsync(Guid userId, string titleAr, string messageAr, Guid? transactionId = null)
+    public async Task NotifyUserAsync(Guid userId, string titleAr, string messageAr,
+        Guid? transactionId = null, NotificationType type = NotificationType.SystemAlert)
     {
         context.Notifications.Add(new Notification
         {
@@ -21,7 +22,7 @@ public class NotificationService(
             UserId = userId,
             TitleAr = titleAr,
             MessageAr = messageAr,
-            Type = NotificationType.SystemAlert,
+            Type = type,
             TransactionId = transactionId,
             IsRead = false,
             CreatedAt = DateTime.UtcNow
@@ -33,7 +34,7 @@ public class NotificationService(
     }
 
     public async Task NotifyRoleAsync(string role, string titleAr, string messageAr,
-        Guid? transactionId = null, Guid? branchId = null)
+        Guid? transactionId = null, Guid? branchId = null, NotificationType type = NotificationType.SystemAlert)
     {
         var usersInRole = await userManager.GetUsersInRoleAsync(role);
         var targetUsers = branchId.HasValue
@@ -46,7 +47,7 @@ public class NotificationService(
             UserId = u.Id,
             TitleAr = titleAr,
             MessageAr = messageAr,
-            Type = NotificationType.SystemAlert,
+            Type = type,
             TransactionId = transactionId,
             IsRead = false,
             CreatedAt = DateTime.UtcNow

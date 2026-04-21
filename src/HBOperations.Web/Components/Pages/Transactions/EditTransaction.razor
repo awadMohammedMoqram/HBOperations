@@ -1,6 +1,6 @@
 @page "/transactions/edit/{Id:guid}"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "SuperAdmin,DepartmentManager,BranchManager,OfficeManager,DepartmentStaff,BranchStaff")]
 @using HBOperations.Application.Common.Interfaces
 @using HBOperations.Domain.Entities
 @using HBOperations.Domain.Enums
