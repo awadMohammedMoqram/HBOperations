@@ -1,4 +1,5 @@
 @page "/branches"
+@rendermode InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using HBOperations.Application.Common.Interfaces
 @using HBOperations.Domain.Entities
@@ -115,10 +116,10 @@
                             </td>
                             <td>
                                 <div class="action-buttons">
-                                    <button class="action-btn edit" title="تعديل" @onclick="() => OpenEditModal(branch)">
+                                    <button class="action-btn edit" title="تعديل" disabled>
                                         <i class="bi bi-pencil-square"></i>
                                     </button>
-                                    <button class="action-btn delete" title="حذف" @onclick="() => OpenDeleteModal(branch)">
+                                    <button class="action-btn delete" title="حذف" disabled>
                                         <i class="bi bi-trash3"></i>
                                     </button>
                                 </div>

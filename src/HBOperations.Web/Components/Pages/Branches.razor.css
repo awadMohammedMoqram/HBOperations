@@ -109,12 +109,18 @@
     transition: all 0.2s;
 }
 
+.action-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+    pointer-events: auto;
+}
+
 .action-btn.edit {
     background: rgba(0, 61, 122, 0.1);
     color: #003d7a;
 }
 
-.action-btn.edit:hover {
+.action-btn.edit:hover:not(:disabled) {
     background: #003d7a;
     color: white;
 }
@@ -124,7 +130,7 @@
     color: #dc3545;
 }
 
-.action-btn.delete:hover {
+.action-btn.delete:hover:not(:disabled) {
     background: #dc3545;
     color: white;
 }

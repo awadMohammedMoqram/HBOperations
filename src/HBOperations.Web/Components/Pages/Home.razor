@@ -1,4 +1,5 @@
 ﻿@page "/"
+@rendermode InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using Microsoft.AspNetCore.Components.Authorization
 @using HBOperations.Application.Common.Interfaces
@@ -85,6 +86,16 @@
                     <h3>المعاملات</h3>
                     <p>عرض وإدارة المعاملات</p>
                 </a>
+                <a href="/reports" class="action-card">
+                    <div class="action-icon action-icon-purple"><i class="bi bi-graph-up-arrow"></i></div>
+                    <h3>التقارير</h3>
+                    <p>تقارير الأداء والفروع</p>
+                </a>
+                <a href="/archive" class="action-card">
+                    <div class="action-icon action-icon-secondary"><i class="bi bi-archive-fill"></i></div>
+                    <h3>الأرشيف</h3>
+                    <p>المعاملات المؤرشفة</p>
+                </a>
                 <a href="/branches" class="action-card">
                     <div class="action-icon action-icon-success"><i class="bi bi-building"></i></div>
                     <h3>الفروع</h3>
@@ -95,6 +106,18 @@
                     <h3>الأقسام</h3>
                     <p>إدارة الأقسام والإدارات</p>
                 </a>
+                <AuthorizeView Roles="SuperAdmin,ITAdmin">
+                    <a href="/users" class="action-card">
+                        <div class="action-icon action-icon-warning"><i class="bi bi-people-fill"></i></div>
+                        <h3>المستخدمين</h3>
+                        <p>إدارة حسابات المستخدمين</p>
+                    </a>
+                    <a href="/audit-log" class="action-card">
+                        <div class="action-icon action-icon-danger"><i class="bi bi-clipboard-data-fill"></i></div>
+                        <h3>سجل المراجعة</h3>
+                        <p>سجل العمليات والتغييرات</p>
+                    </a>
+                </AuthorizeView>
             </div>
         </div>
     </section>

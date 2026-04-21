@@ -3,6 +3,7 @@
 @using HBOperations.Application.Common.Interfaces
 @using HBOperations.Web.Services
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.DependencyInjection
 @implements IAsyncDisposable
 
 <header class="hb-header" dir="rtl">
@@ -28,26 +29,13 @@
             <a href="/transactions" class="nav-link @GetActiveClass("/transactions")" @onclick="CloseMobileMenu">
                 <i class="bi bi-file-earmark-text"></i> المعاملات
             </a>
-            <a href="/branches" class="nav-link @GetActiveClass("/branches")" @onclick="CloseMobileMenu">
-                <i class="bi bi-building"></i> الفروع
-            </a>
-            <a href="/departments" class="nav-link @GetActiveClass("/departments")" @onclick="CloseMobileMenu">
-                <i class="bi bi-diagram-3"></i> الأقسام
-            </a>
             <a href="/reports" class="nav-link @GetActiveClass("/reports")" @onclick="CloseMobileMenu">
                 <i class="bi bi-graph-up"></i> التقارير
             </a>
             <a href="/archive" class="nav-link @GetActiveClass("/archive")" @onclick="CloseMobileMenu">
                 <i class="bi bi-archive"></i> الأرشيف
             </a>
-
             <AuthorizeView Roles="SuperAdmin,ITAdmin">
-                <a href="/users" class="nav-link @GetActiveClass("/users")" @onclick="CloseMobileMenu">
-                    <i class="bi bi-people-fill"></i> المستخدمين
-                </a>
-                <a href="/audit-log" class="nav-link @GetActiveClass("/audit-log")" @onclick="CloseMobileMenu">
-                    <i class="bi bi-clipboard-data"></i> سجل المراجعة
-                </a>
                 <a href="/settings" class="nav-link @GetActiveClass("/settings")" @onclick="CloseMobileMenu">
                     <i class="bi bi-gear-fill"></i> الإعدادات
                 </a>
@@ -79,7 +67,7 @@
 
 @code {
     [Inject] private NavigationManager Navigation { get; set; } = default!;
-    [Inject] private IAppDbContext DbContext { get; set; } = default!;
+    [Inject] private IServiceScopeFactory ScopeFactory { get; set; } = default!;
     [Inject] private ICurrentUserService CurrentUser { get; set; } = default!;
     [Inject] private NotificationEventService NotificationEvents { get; set; } = default!;
 
@@ -90,10 +78,12 @@
     {
         Navigation.LocationChanged += OnLocationChanged;
 
-        // Load unread count from DB
+        // Load unread count using a separate scope to avoid concurrent DbContext access
         if (CurrentUser.UserId != Guid.Empty)
         {
-            _unreadCount = await DbContext.Notifications
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
+            _unreadCount = await db.Notifications
                 .CountAsync(n => n.UserId == CurrentUser.UserId && !n.IsRead);
         }
 

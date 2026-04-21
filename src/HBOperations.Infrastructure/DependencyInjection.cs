@@ -55,7 +55,7 @@ public static class DependencyInjection
         // Services
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IAuditService, AuditService>();
-        services.AddScoped<IFileStorageService, LocalFileStorageService>();
+        services.AddScoped<IFileStorageService, AzureBlobStorageService>();
         services.AddSingleton<IFileValidationService, FileValidationService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddMemoryCache();
