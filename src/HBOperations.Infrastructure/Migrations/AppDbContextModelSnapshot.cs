@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace HBOperations.Infrastructure.Data.Migrations
+namespace HBOperations.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
     partial class AppDbContextModelSnapshot : ModelSnapshot
@@ -271,6 +271,15 @@ namespace HBOperations.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("AdminEditedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AdminEditedByName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("AdminEditedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("datetime2");
 
@@ -287,17 +296,14 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime?>("FirstApprovedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("FirstApprovedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<int>("Priority")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ReceivedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ReceivedByUserId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("ReceiverBranchId")
                         .HasColumnType("uniqueidentifier");
@@ -305,7 +311,11 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.Property<Guid?>("ReceiverDepartmentId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("ReceiverUserId")
+                    b.Property<string>("ReceiverNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("ReceiverUserId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("ReferenceNumber")
@@ -313,11 +323,12 @@ namespace HBOperations.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime?>("SecondApprovedAt")
-                        .HasColumnType("datetime2");
+                    b.Property<string>("RejectionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
-                    b.Property<Guid?>("SecondApprovedByUserId")
-                        .HasColumnType("uniqueidentifier");
+                    b.Property<bool>("RequireReceiverDocument")
+                        .HasColumnType("bit");
 
                     b.Property<Guid?>("SenderBranchId")
                         .HasColumnType("uniqueidentifier");
@@ -325,10 +336,14 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.Property<Guid?>("SenderDepartmentId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("SenderNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<Guid>("SenderUserId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTime?>("SentAt")
+                    b.Property<DateTime>("SentAt")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Status")
@@ -353,8 +368,6 @@ namespace HBOperations.Infrastructure.Data.Migrations
 
                     b.HasIndex("Priority");
 
-                    b.HasIndex("ReceiverDepartmentId");
-
                     b.HasIndex("ReferenceNumber")
                         .IsUnique();
 
@@ -365,6 +378,8 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.HasIndex("Type");
 
                     b.HasIndex("ReceiverBranchId", "Status");
+
+                    b.HasIndex("ReceiverDepartmentId", "Status");
 
                     b.HasIndex("ReceiverUserId", "Status");
 

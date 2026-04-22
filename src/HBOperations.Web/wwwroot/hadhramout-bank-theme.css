@@ -63,6 +63,19 @@ body {
     position: relative;
 }
 
+/* Force Tajawal on all form controls (browsers default these to system font) */
+button,
+input,
+optgroup,
+select,
+textarea,
+.btn,
+[type="button"],
+[type="submit"],
+[type="reset"] {
+    font-family: var(--hb-font-family) !important;
+}
+
 /* خلفية منقوشة */
 body::before {
     content: '';
@@ -265,6 +278,18 @@ body::before {
     border-color: #26b050;
 }
 
+/* Larger, resizable note textareas (used in dialogs and action panels) */
+textarea.hb-form-control {
+    resize: vertical;
+    min-height: 110px;
+    line-height: 1.6;
+}
+textarea.hb-form-control.note-textarea {
+    min-height: 140px;
+    max-height: 480px;
+    font-size: 0.95rem;
+}
+
 .validation-message {
     color: #e50000;
     font-size: 0.875rem;
@@ -281,6 +306,17 @@ body::before {
     font-weight: 600;
     text-align: center;
 }
+
+/* Badge with leading icon (flex layout for proper spacing) */
+.hb-badge.priority-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    line-height: 1;
+}
+.hb-badge.priority-badge i { font-size: 0.85rem; line-height: 1; }
+.hb-badge.priority-badge span { line-height: 1; }
 
 .hb-badge-primary {
     background-color: var(--hb-primary);
@@ -309,6 +345,26 @@ body::before {
 
 .hb-badge-secondary {
     background-color: var(--hb-gray);
+    color: var(--hb-white);
+}
+
+.hb-badge-info {
+    background-color: #17a2b8;
+    color: var(--hb-white);
+}
+
+.hb-badge-archived {
+    background-color: #20c997;
+    color: var(--hb-white);
+}
+
+.hb-badge-cancelled {
+    background-color: #6c757d;
+    color: var(--hb-white);
+}
+
+.hb-badge-disputed {
+    background-color: #e83e8c;
     color: var(--hb-white);
 }
 

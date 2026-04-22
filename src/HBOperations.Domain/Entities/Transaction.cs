@@ -13,31 +13,44 @@ public class Transaction : BaseEntity, IHasTimestamps
     public TransactionPriority Priority { get; set; }
     public TransactionStatus Status { get; set; }
 
-    // Sender
+    // المرسل (يُحدَّد تلقائياً من فرع/إدارة المُنشئ)
     public Guid SenderUserId { get; set; }
     public Guid? SenderBranchId { get; set; }
     public Guid? SenderDepartmentId { get; set; }
 
-    // Receiver
-    public Guid ReceiverUserId { get; set; }
+    // المستلم (يُوجَّه لفرع — مع تحديد شخص مستلم بعينه)
     public Guid? ReceiverBranchId { get; set; }
     public Guid? ReceiverDepartmentId { get; set; }
+    public Guid? ReceiverUserId { get; set; }
 
-    // Dates
+    // الموظف الذي قام فعلياً بتأكيد الاستلام/الرفض
+    public Guid? ReceivedByUserId { get; set; }
+
+    // الملاحظات التوثيقية لكل دور — كل واحدة لها معنى محدد
+    // ملاحظة من المرسل عند إنشاء المعاملة (اختيارية)
+    public string? SenderNote { get; set; }
+    // ملاحظة من المستلم عند تأكيد الاستلام (اختيارية)
+    public string? ReceiverNote { get; set; }
+    // سبب الرفض من المستلم (إجباري عند الرفض)
+    public string? RejectionNote { get; set; }
+
+    // إعدادات يحددها المرسل عند الإنشاء
+    public bool RequireReceiverDocument { get; set; }
+
+    // التواريخ
     public DateTime? DueDate { get; set; }
-    public DateTime? SentAt { get; set; }
+    public DateTime SentAt { get; set; }
     public DateTime? ReceivedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    public Guid CreatedByUserId { get; set; }
+    // تعديل إداري — يُسجَّل عند تعديل المعاملة من قبل مدير النظام (SuperAdmin)
+    public DateTime? AdminEditedAt { get; set; }
+    public Guid? AdminEditedByUserId { get; set; }
+    public string? AdminEditedByName { get; set; }
 
-    // Dual Approval (for Critical priority)
-    public Guid? FirstApprovedByUserId { get; set; }
-    public DateTime? FirstApprovedAt { get; set; }
-    public Guid? SecondApprovedByUserId { get; set; }
-    public DateTime? SecondApprovedAt { get; set; }
+    public Guid CreatedByUserId { get; set; }
 
     // Navigation
     public Branch? SenderBranch { get; set; }

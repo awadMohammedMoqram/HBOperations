@@ -6,6 +6,7 @@
 @using HBOperations.Domain.Entities
 @using Microsoft.EntityFrameworkCore
 @inject IAppDbContext DbContext
+@inject ICurrentUserService CurrentUser
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -56,7 +57,7 @@
                                 <th>الصادرة</th>
                                 <th>الواردة</th>
                                 <th>الإجمالي</th>
-                                <th>قيد المراجعة</th>
+                                <th>بانتظار الاستلام</th>
                                 <th>مكتملة</th>
                                 <th>ملغاة</th>
                             </tr>
@@ -205,7 +206,24 @@
 
     private async Task LoadReports()
     {
-        var transactions = DbContext.Transactions.AsNoTracking();
+        // Only SuperAdmin/CEO/ITAdmin see all; everyone else sees only their personal transactions
+        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin" };
+        var hasGlobalAccess = globalRoles.Any(r => CurrentUser.IsInRole(r));
+
+        IQueryable<Transaction> transactions = DbContext.Transactions.AsNoTracking();
+
+        if (!hasGlobalAccess)
+        {
+            var userId = CurrentUser.UserId;
+            var branchId = CurrentUser.BranchId;
+            var deptId = CurrentUser.DepartmentId;
+            transactions = transactions.Where(t =>
+                t.CreatedByUserId == userId ||
+                t.SenderUserId == userId ||
+                (branchId.HasValue && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
+                t.ReceiverUserId == userId || (deptId.HasValue && t.SenderDepartmentId == deptId));
+        }
+
         _totalCount = await transactions.CountAsync();
 
         // ── Branch Report ──
@@ -223,8 +241,8 @@
             BranchName = b.NameAr,
             Outgoing = txList.Count(t => t.SenderBranchId == b.Id),
             Incoming = txList.Count(t => t.ReceiverBranchId == b.Id),
-            Pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.PendingReview),
-            Completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Confirmed || t.Status == TransactionStatus.Archived)),
+            Pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Sent),
+            Completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived)),
             Cancelled = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Cancelled)
         }).Where(r => r.Total > 0).ToList();
 
@@ -293,27 +311,20 @@
 
     private static string GetTypeIcon(TransactionType t) => t switch
     {
-        TransactionType.OutgoingFromHQ => "bi-arrow-up-left-circle",
-        TransactionType.IncomingToHQ => "bi-arrow-down-right-circle",
         TransactionType.BranchToBranch => "bi-arrow-left-right",
         TransactionType.CashTransfer => "bi-cash-stack",
         TransactionType.DocumentDelivery => "bi-file-earmark-arrow-up",
         TransactionType.InternalDepartment => "bi-diagram-3",
-        TransactionType.ReturnedItem => "bi-arrow-return-right",
-        TransactionType.AuditRequest => "bi-clipboard-data",
         _ => "bi-file-earmark-text"
     };
 
     private static string GetTypeLabel(TransactionType t) => t switch
     {
-        TransactionType.OutgoingFromHQ => "صادر من الإدارة العامة",
-        TransactionType.IncomingToHQ => "وارد للإدارة العامة",
-        TransactionType.BranchToBranch => "بين الفروع",
-        TransactionType.InternalDepartment => "داخلي بين الأقسام",
         TransactionType.DocumentDelivery => "تسليم مستندات",
         TransactionType.CashTransfer => "تحويل نقدي",
-        TransactionType.ReturnedItem => "مرتجع",
-        TransactionType.AuditRequest => "طلب تدقيق",
+        TransactionType.InternalDepartment => "داخلي بين الإدارات",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.Other => "أخرى",
         _ => t.ToString()
     };
 

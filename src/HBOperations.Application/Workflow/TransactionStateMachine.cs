@@ -9,102 +9,141 @@ public class TransactionStateMachine
     private static readonly Dictionary<TransactionStatus, HashSet<TransactionStatus>>
         AllowedTransitions = new()
         {
-            [TransactionStatus.Draft] = [TransactionStatus.PendingReview, TransactionStatus.Cancelled],
-            [TransactionStatus.PendingReview] = [TransactionStatus.Approved, TransactionStatus.PendingSecondApproval, TransactionStatus.Returned, TransactionStatus.Cancelled],
-            [TransactionStatus.PendingSecondApproval] = [TransactionStatus.Approved, TransactionStatus.Returned, TransactionStatus.Cancelled],
-            [TransactionStatus.Approved] = [TransactionStatus.InTransit],
-            [TransactionStatus.InTransit] = [TransactionStatus.Received, TransactionStatus.Returned],
-            [TransactionStatus.Received] = [TransactionStatus.Confirmed, TransactionStatus.Disputed, TransactionStatus.Returned],
-            [TransactionStatus.Confirmed] = [TransactionStatus.Archived],
-            [TransactionStatus.Returned] = [TransactionStatus.Draft, TransactionStatus.Cancelled],
-            [TransactionStatus.Disputed] = [TransactionStatus.Confirmed, TransactionStatus.Returned],
+            [TransactionStatus.Sent]      = [TransactionStatus.Received, TransactionStatus.Rejected],
+            [TransactionStatus.Received]  = [TransactionStatus.Archived],
+            [TransactionStatus.Rejected]  = [TransactionStatus.Archived],
             [TransactionStatus.Cancelled] = [],
-            [TransactionStatus.Archived] = []
+            [TransactionStatus.Archived]  = []
         };
 
-    public bool CanTransition(TransactionStatus from, TransactionStatus to)
-    {
-        return AllowedTransitions.TryGetValue(from, out var allowed) && allowed.Contains(to);
-    }
+    private static readonly HashSet<string> GlobalViewRoles =
+        ["SuperAdmin", "CEO", "ITAdmin", "Auditor", "ComplianceOfficer"];
 
-    public IReadOnlyCollection<TransactionStatus> GetAllowedTransitions(TransactionStatus currentStatus)
-    {
-        return AllowedTransitions.TryGetValue(currentStatus, out var allowed)
+    private static readonly HashSet<string> ArchiveRoles =
+        ["SuperAdmin", "ITAdmin"];
+
+    public bool CanTransition(TransactionStatus from, TransactionStatus to)
+        => AllowedTransitions.TryGetValue(from, out var allowed) && allowed.Contains(to);
+
+    public IReadOnlyCollection<TransactionStatus> GetAllowedTransitions(TransactionStatus current)
+        => AllowedTransitions.TryGetValue(current, out var allowed)
             ? allowed.ToList().AsReadOnly()
             : Array.Empty<TransactionStatus>().AsReadOnly();
+
+    public static bool IsAuthorizedReceiver(Transaction tx, Guid userId, Guid? userBranchId, Guid? userDepartmentId)
+    {
+        // المُرسِل لا يمكن أن يكون مستلماً لمعاملته
+        if (IsSender(tx, userId)) return false;
+
+        // إذا كان هناك مستلم محدد بالاسم، فهو وحده المستلم المعتمد
+        if (tx.ReceiverUserId.HasValue)
+            return tx.ReceiverUserId == userId;
+
+        // وإلا فأي عضو في الفرع/الإدارة المستلِمة (ما عدا المرسل أعلاه)
+        if (tx.ReceiverBranchId.HasValue && userBranchId == tx.ReceiverBranchId) return true;
+        if (tx.ReceiverDepartmentId.HasValue && userDepartmentId == tx.ReceiverDepartmentId) return true;
+        return false;
     }
 
-    /// <summary>
-    /// Get filtered transitions based on transaction context (e.g., hide PendingSecondApproval for non-critical)
-    /// </summary>
-    public IReadOnlyCollection<TransactionStatus> GetContextualTransitions(Transaction transaction)
-    {
-        var transitions = GetAllowedTransitions(transaction.Status).ToList();
+    public static bool IsSender(Transaction tx, Guid userId)
+        => tx.SenderUserId == userId || tx.CreatedByUserId == userId;
 
-        // For PendingReview: if Critical, show PendingSecondApproval instead of Approved
-        if (transaction.Status == TransactionStatus.PendingReview)
+    public static bool HasGlobalAccess(IEnumerable<string> userRoles)
+        => userRoles.Any(GlobalViewRoles.Contains);
+
+    public IReadOnlyCollection<TransactionStatus> GetContextualTransitions(
+        Transaction tx,
+        Guid userId,
+        Guid? userBranchId,
+        Guid? userDepartmentId,
+        IEnumerable<string> userRoles)
+    {
+        var result = new List<TransactionStatus>();
+        var roles = userRoles as string[] ?? userRoles.ToArray();
+
+        var isReceiver = IsAuthorizedReceiver(tx, userId, userBranchId, userDepartmentId);
+        var isAdmin = roles.Any(ArchiveRoles.Contains);
+
+        if (tx.Status == TransactionStatus.Sent && isReceiver)
         {
-            if (transaction.Priority == TransactionPriority.Critical)
-            {
-                transitions.Remove(TransactionStatus.Approved);
-            }
-            else
-            {
-                transitions.Remove(TransactionStatus.PendingSecondApproval);
-            }
+            result.Add(TransactionStatus.Received);
+            result.Add(TransactionStatus.Rejected);
         }
 
-        return transitions.AsReadOnly();
+        if (isAdmin && tx.Status is TransactionStatus.Received or TransactionStatus.Rejected)
+            result.Add(TransactionStatus.Archived);
+
+        return result.AsReadOnly();
     }
 
-    public Result TransitionTo(Transaction transaction, TransactionStatus newStatus,
-        Guid userId, string? notes = null, string? ipAddress = null)
+    public static bool CanCancel(Transaction tx, Guid userId)
+        => tx.Status == TransactionStatus.Sent && IsSender(tx, userId);
+
+    public Result TransitionTo(
+        Transaction tx,
+        TransactionStatus target,
+        Guid userId,
+        Guid? userBranchId,
+        Guid? userDepartmentId,
+        IEnumerable<string> userRoles,
+        string? notes = null,
+        string? ipAddress = null,
+        DateTime? actualReceivedAt = null)
     {
-        if (!CanTransition(transaction.Status, newStatus))
-            return Result.Failure($"لا يمكن الانتقال من {transaction.Status} إلى {newStatus}");
+        if (!CanTransition(tx.Status, target))
+            return Result.Failure("لا يمكن الانتقال من الحالة الحالية إلى الحالة المطلوبة");
 
-        // Dual approval for Critical: PendingReview → PendingSecondApproval (first approval)
-        if (transaction.Status == TransactionStatus.PendingReview &&
-            newStatus == TransactionStatus.PendingSecondApproval)
+        var allowed = GetContextualTransitions(tx, userId, userBranchId, userDepartmentId, userRoles);
+        if (!allowed.Contains(target))
+            return Result.Failure("ليس لديك صلاحية لتنفيذ هذا الإجراء على هذه المعاملة");
+
+        if (target == TransactionStatus.Rejected && string.IsNullOrWhiteSpace(notes))
+            return Result.Failure("الرفض يتطلب كتابة سبب");
+
+        // تحقق من تاريخ الاستلام الفعلي عند التأكيد
+        DateTime receivedAtUtc = DateTime.UtcNow;
+        if (target == TransactionStatus.Received && actualReceivedAt.HasValue)
         {
-            transaction.FirstApprovedByUserId = userId;
-            transaction.FirstApprovedAt = DateTime.UtcNow;
+            var ts = actualReceivedAt.Value;
+            // إذا كان Local نحوّله UTC، إذا Unspecified نعتبره Local
+            if (ts.Kind == DateTimeKind.Unspecified)
+                ts = DateTime.SpecifyKind(ts, DateTimeKind.Local);
+            var utc = ts.ToUniversalTime();
+            if (utc < tx.SentAt)
+                return Result.Failure("تاريخ الاستلام لا يمكن أن يكون قبل تاريخ الإرسال");
+            if (utc > DateTime.UtcNow.AddMinutes(5))
+                return Result.Failure("تاريخ الاستلام لا يمكن أن يكون في المستقبل");
+            receivedAtUtc = utc;
         }
 
-        // Second approval: PendingSecondApproval → Approved
-        if (transaction.Status == TransactionStatus.PendingSecondApproval &&
-            newStatus == TransactionStatus.Approved)
+        var oldStatus = tx.Status;
+        tx.Status = target;
+
+        switch (target)
         {
-            if (userId == transaction.FirstApprovedByUserId)
-                return Result.Failure("لا يمكن للمعتمد الأول أن يكون نفسه المعتمد الثاني");
-
-            transaction.SecondApprovedByUserId = userId;
-            transaction.SecondApprovedAt = DateTime.UtcNow;
-        }
-
-        var oldStatus = transaction.Status;
-        transaction.Status = newStatus;
-
-        switch (newStatus)
-        {
-            case TransactionStatus.InTransit:
-                transaction.SentAt = DateTime.UtcNow;
-                break;
             case TransactionStatus.Received:
-                transaction.ReceivedAt = DateTime.UtcNow;
+                tx.ReceivedAt = receivedAtUtc;
+                tx.ReceivedByUserId = userId;
+                tx.CompletedAt = receivedAtUtc;
+                if (!string.IsNullOrWhiteSpace(notes))
+                    tx.ReceiverNote = notes.Trim();
                 break;
-            case TransactionStatus.Confirmed:
+            case TransactionStatus.Rejected:
+                tx.ReceivedByUserId = userId;
+                tx.CompletedAt = DateTime.UtcNow;
+                tx.RejectionNote = notes?.Trim();
+                break;
             case TransactionStatus.Archived:
-                transaction.CompletedAt = DateTime.UtcNow;
+                tx.CompletedAt ??= DateTime.UtcNow;
                 break;
         }
 
-        transaction.History.Add(new TransactionHistory
+        tx.History.Add(new TransactionHistory
         {
-            TransactionId = transaction.Id,
+            TransactionId = tx.Id,
             FromStatus = oldStatus,
-            ToStatus = newStatus,
-            Action = GetActionName(newStatus),
+            ToStatus = target,
+            Action = GetActionName(target),
             Notes = notes,
             PerformedByUserId = userId,
             IpAddress = ipAddress,
@@ -116,16 +155,10 @@ public class TransactionStateMachine
 
     private static string GetActionName(TransactionStatus to) => to switch
     {
-        TransactionStatus.PendingReview => "تم الإرسال للمراجعة",
-        TransactionStatus.PendingSecondApproval => "تم الاعتماد الأول (بانتظار الاعتماد الثاني)",
-        TransactionStatus.Approved => "تم الاعتماد",
-        TransactionStatus.InTransit => "تم الإرسال",
-        TransactionStatus.Received => "تم الاستلام",
-        TransactionStatus.Confirmed => "تم التأكيد",
-        TransactionStatus.Returned => "تم الإرجاع",
-        TransactionStatus.Disputed => "نزاع",
-        TransactionStatus.Cancelled => "تم الإلغاء",
-        TransactionStatus.Archived => "تم الأرشفة",
+        TransactionStatus.Received  => "تم تأكيد الاستلام",
+        TransactionStatus.Rejected  => "تم رفض المعاملة",
+        TransactionStatus.Cancelled => "تم إلغاء المعاملة",
+        TransactionStatus.Archived  => "تمت الأرشفة",
         _ => to.ToString()
     };
 }

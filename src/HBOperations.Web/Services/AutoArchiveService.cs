@@ -45,9 +45,9 @@ public class AutoArchiveService(IServiceProvider serviceProvider, ILogger<AutoAr
         var daysAfter = await settingService.GetIntAsync("AutoArchive.DaysAfterCompletion", 90);
         var cutoffDate = DateTime.UtcNow.AddDays(-daysAfter);
 
-        // Archive completed/confirmed transactions older than cutoff
+        // Archive completed transactions older than cutoff
         var toArchive = await db.Transactions
-            .Where(t => (t.Status == TransactionStatus.Confirmed || t.Status == TransactionStatus.Cancelled)
+            .Where(t => (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Rejected || t.Status == TransactionStatus.Cancelled)
                         && t.CompletedAt.HasValue
                         && t.CompletedAt.Value < cutoffDate)
             .ToListAsync(ct);

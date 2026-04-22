@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using HBOperations.Application.Common.Interfaces
+@using HBOperations.Application.Workflow
 @using HBOperations.Domain.Enums
 @using HBOperations.Infrastructure.Identity
 @using Microsoft.AspNetCore.Identity
@@ -10,6 +11,8 @@
 @inject ICurrentUserService CurrentUser
 @inject UserManager<ApplicationUser> UserManager
 @inject NavigationManager Navigation
+@inject TransactionStateMachine StateMachine
+@inject INotificationService NotificationService
 
 <PageTitle>المعاملات - بنك حضرموت</PageTitle>
 
@@ -76,19 +79,14 @@
             <span class="stat-label">إجمالي</span>
         </div>
         <div class="stat-item stat-pending">
-            <i class="bi bi-clock"></i>
+            <i class="bi bi-send"></i>
             <span class="stat-number">@_pendingCount</span>
-            <span class="stat-label">قيد المراجعة</span>
-        </div>
-        <div class="stat-item stat-transit">
-            <i class="bi bi-truck"></i>
-            <span class="stat-number">@_inTransitCount</span>
-            <span class="stat-label">قيد النقل</span>
+            <span class="stat-label">بانتظار الاستلام</span>
         </div>
         <div class="stat-item stat-completed">
             <i class="bi bi-check-circle"></i>
             <span class="stat-number">@_completedCount</span>
-            <span class="stat-label">مكتملة</span>
+            <span class="stat-label">مستلمة / مؤرشفة</span>
         </div>
     </div>
 
@@ -146,8 +144,9 @@
                             <td>@(t.SenderBranch?.NameAr ?? "—")</td>
                             <td>@(t.ReceiverBranch?.NameAr ?? "—")</td>
                             <td>
-                                <span class="hb-badge @GetPriorityBadgeClass(t.Priority)">
-                                    @GetPriorityLabel(t.Priority)
+                                <span class="hb-badge priority-badge @GetPriorityBadgeClass(t.Priority)">
+                                    <i class="@GetPriorityIcon(t.Priority)"></i>
+                                    <span>@GetPriorityLabel(t.Priority)</span>
                                 </span>
                             </td>
                             <td>
@@ -162,12 +161,30 @@
                                     <a href="/transactions/@t.Id" class="action-btn view" title="عرض التفاصيل">
                                         <i class="bi bi-eye"></i>
                                     </a>
-                                    <a href="/transactions/edit/@t.Id" class="action-btn edit" title="تعديل">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </a>
-                                    <button class="action-btn delete" title="حذف" @onclick="() => OpenDeleteModal(t)">
-                                        <i class="bi bi-trash3"></i>
-                                    </button>
+                                    @{
+                                        var isReceiverOnly = IsReceiverOnly(t);
+                                        var isSender = IsSenderFor(t);
+                                        var canEdit = isSender && t.Status is not (TransactionStatus.Cancelled or TransactionStatus.Archived or TransactionStatus.Received or TransactionStatus.Rejected);
+                                        var canReject = isReceiverOnly && t.Status == TransactionStatus.Sent;
+                                    }
+                                    @if (canEdit)
+                                    {
+                                        <a href="/transactions/edit/@t.Id" class="action-btn edit" title="تعديل">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </a>
+                                    }
+                                    @if (canReject)
+                                    {
+                                        <button class="action-btn reject" title="رفض المعاملة" @onclick="() => OpenRejectModal(t)">
+                                            <i class="bi bi-x-octagon"></i>
+                                        </button>
+                                    }
+                                    @if (isSender)
+                                    {
+                                        <button class="action-btn delete" title="حذف" @onclick="() => OpenDeleteModal(t)">
+                                            <i class="bi bi-trash3"></i>
+                                        </button>
+                                    }
                                 </div>
                             </td>
                         </tr>
@@ -240,6 +257,47 @@
     </div>
 }
 
+@* ===== Reject Confirmation Modal ===== *@
+@if (_showRejectModal)
+{
+    <div class="modal-overlay" @onclick="CloseRejectModal">
+        <div class="modal-content modal-sm" @onclick:stopPropagation="true">
+            <div class="modal-header modal-header-danger">
+                <h3><i class="bi bi-x-octagon"></i> رفض المعاملة</h3>
+                <button class="modal-close" @onclick="CloseRejectModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(_rejectError))
+                {
+                    <div class="hb-alert hb-alert-danger" style="margin-bottom:1rem;">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @_rejectError
+                    </div>
+                }
+                <p class="delete-message">رفض المعاملة <strong>@_rejectingTransaction?.ReferenceNumber</strong></p>
+                <p class="delete-subject">@_rejectingTransaction?.Subject</p>
+                <div class="hb-form-group" style="margin-top:1rem;">
+                    <label class="hb-form-label">سبب الرفض <span class="required-star">*</span></label>
+                    <textarea class="hb-form-control note-textarea" rows="6" maxlength="1000"
+                              placeholder="اكتب سبب رفض المعاملة بشكل واضح..."
+                              @bind="_rejectionNote" @bind:event="oninput"></textarea>
+                    <small class="hb-form-help">سيتم إشعار المرسل بسبب الرفض.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-hb-danger" @onclick="ConfirmReject"
+                        disabled="@(_rejecting || string.IsNullOrWhiteSpace(_rejectionNote))">
+                    @if (_rejecting)
+                    {
+                        <span class="hb-spinner" style="width:18px;height:18px;border-width:2px;"></span>
+                    }
+                    <i class="bi bi-x-octagon"></i> تأكيد الرفض
+                </button>
+                <button class="btn-hb-outline" @onclick="CloseRejectModal">تراجع</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<HBOperations.Domain.Entities.Transaction> _transactions = [];
     private bool _loading = true;
@@ -258,6 +316,12 @@
     private string? _deleteError, _successMessage;
     private HBOperations.Domain.Entities.Transaction? _deletingTransaction;
 
+    // Reject modal state
+    private bool _showRejectModal, _rejecting;
+    private string? _rejectError;
+    private string? _rejectionNote;
+    private HBOperations.Domain.Entities.Transaction? _rejectingTransaction;
+
     [SupplyParameterFromQuery(Name = "success")]
     public string? SuccessFromQuery { get; set; }
 
@@ -271,8 +335,8 @@
 
     private async Task LoadTransactions()
     {
-        // Global roles see all transactions; others see only their branch/department
-        var globalRoles = new[] { "SuperAdmin", "CEO", "Auditor", "ComplianceOfficer", "ITAdmin" };
+        // Only SuperAdmin/CEO/ITAdmin see all; everyone else sees only their personal transactions
+        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin" };
         var hasGlobalAccess = globalRoles.Any(r => CurrentUser.IsInRole(r));
 
         IQueryable<HBOperations.Domain.Entities.Transaction> query = DbContext.Transactions
@@ -281,17 +345,15 @@
 
         if (!hasGlobalAccess)
         {
+            var userId = CurrentUser.UserId;
             var branchId = CurrentUser.BranchId;
             var deptId = CurrentUser.DepartmentId;
-            var userId = CurrentUser.UserId;
 
-            // AssistantCEO sees their department's transactions
             query = query.Where(t =>
                 t.CreatedByUserId == userId ||
                 t.SenderUserId == userId ||
-                t.ReceiverUserId == userId ||
-                (branchId != null && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
-                (deptId != null && (t.SenderDepartmentId == deptId || t.ReceiverDepartmentId == deptId)));
+                (branchId.HasValue && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
+                t.ReceiverUserId == userId || (deptId.HasValue && t.SenderDepartmentId == deptId));
         }
 
         _transactions = await query
@@ -299,9 +361,9 @@
             .ToListAsync();
 
         _totalCount = _transactions.Count;
-        _pendingCount = _transactions.Count(t => t.Status == TransactionStatus.PendingReview);
-        _inTransitCount = _transactions.Count(t => t.Status == TransactionStatus.InTransit);
-        _completedCount = _transactions.Count(t => t.Status is TransactionStatus.Confirmed or TransactionStatus.Archived);
+        _pendingCount = _transactions.Count(t => t.Status == TransactionStatus.Sent);
+        _inTransitCount = _transactions.Count(t => t.Status == TransactionStatus.Sent);
+        _completedCount = _transactions.Count(t => t.Status is TransactionStatus.Received or TransactionStatus.Archived);
         _loading = false;
     }
 
@@ -332,6 +394,75 @@
     }
 
     private void CloseDeleteModal() { _showDeleteModal = false; _deleteError = null; }
+
+    // ===== Receiver / Sender helpers =====
+    private bool IsSenderFor(HBOperations.Domain.Entities.Transaction t)
+        => t.SenderUserId == CurrentUser.UserId || t.CreatedByUserId == CurrentUser.UserId;
+
+    private bool IsReceiverOnly(HBOperations.Domain.Entities.Transaction t)
+    {
+        if (IsSenderFor(t)) return false;
+        return TransactionStateMachine.IsAuthorizedReceiver(t, CurrentUser.UserId, CurrentUser.BranchId, CurrentUser.DepartmentId);
+    }
+
+    // ===== Reject flow =====
+    private void OpenRejectModal(HBOperations.Domain.Entities.Transaction tx)
+    {
+        _rejectingTransaction = tx;
+        _rejectError = null;
+        _rejectionNote = null;
+        _showRejectModal = true;
+    }
+
+    private void CloseRejectModal()
+    {
+        if (_rejecting) return;
+        _showRejectModal = false;
+        _rejectError = null;
+        _rejectionNote = null;
+    }
+
+    private async Task ConfirmReject()
+    {
+        if (_rejectingTransaction is null || string.IsNullOrWhiteSpace(_rejectionNote)) return;
+        _rejecting = true; _rejectError = null;
+        try
+        {
+            var tracked = await DbContext.Transactions
+                .Include(t => t.History)
+                .FirstOrDefaultAsync(t => t.Id == _rejectingTransaction.Id);
+            if (tracked is null) { _rejectError = "المعاملة غير موجودة"; return; }
+
+            var result = StateMachine.TransitionTo(
+                tracked, TransactionStatus.Rejected,
+                CurrentUser.UserId, CurrentUser.BranchId, CurrentUser.DepartmentId, CurrentUser.Roles,
+                _rejectionNote.Trim());
+            if (!result.IsSuccess) { _rejectError = result.Error; return; }
+
+            await DbContext.SaveChangesAsync();
+
+            try
+            {
+                if (tracked.SenderUserId != CurrentUser.UserId)
+                {
+                    await NotificationService.NotifyUserAsync(
+                        tracked.SenderUserId,
+                        $"رفض المعاملة {tracked.ReferenceNumber}",
+                        $"رفض المستلم المعاملة. السبب: {_rejectionNote!.Trim()}",
+                        tracked.Id,
+                        NotificationType.TransactionStatusChanged);
+                }
+            }
+            catch { /* notification failure must not block */ }
+
+            _successMessage = $"تم رفض المعاملة «{tracked.ReferenceNumber}» وإشعار المرسل";
+            _showRejectModal = false;
+            _rejectionNote = null;
+            await LoadTransactions();
+        }
+        catch (Exception ex) { _rejectError = $"حدث خطأ: {ex.Message}"; }
+        finally { _rejecting = false; }
+    }
 
     private IEnumerable<HBOperations.Domain.Entities.Transaction> GetFilteredTransactions()
     {
@@ -373,14 +504,9 @@
 
     private static string GetStatusLabel(TransactionStatus s) => s switch
     {
-        TransactionStatus.Draft => "مسودة",
-        TransactionStatus.PendingReview => "قيد المراجعة",
-        TransactionStatus.Approved => "معتمدة",
-        TransactionStatus.InTransit => "قيد النقل",
-        TransactionStatus.Received => "مستلمة",
-        TransactionStatus.Confirmed => "مؤكدة",
-        TransactionStatus.Returned => "مرتجعة",
-        TransactionStatus.Disputed => "متنازع عليها",
+        TransactionStatus.Sent => "بانتظار الاستلام",
+        TransactionStatus.Received => "تم الاستلام",
+        TransactionStatus.Rejected => "مرفوضة",
         TransactionStatus.Cancelled => "ملغاة",
         TransactionStatus.Archived => "مؤرشفة",
         _ => s.ToString()
@@ -388,14 +514,11 @@
 
     private static string GetTypeLabel(TransactionType t) => t switch
     {
-        TransactionType.OutgoingFromHQ => "صادر من الإدارة",
-        TransactionType.IncomingToHQ => "وارد للإدارة",
-        TransactionType.BranchToBranch => "بين الفروع",
-        TransactionType.InternalDepartment => "داخلي",
         TransactionType.DocumentDelivery => "تسليم مستندات",
         TransactionType.CashTransfer => "تحويل نقدي",
-        TransactionType.ReturnedItem => "مرتجع",
-        TransactionType.AuditRequest => "طلب تدقيق",
+        TransactionType.InternalDepartment => "داخلي بين الإدارات",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.Other => "أخرى",
         _ => t.ToString()
     };
 
@@ -404,20 +527,14 @@
         TransactionPriority.Normal => "عادية",
         TransactionPriority.Important => "مهمة",
         TransactionPriority.Urgent => "عاجلة",
-        TransactionPriority.Critical => "حرجة",
         _ => p.ToString()
     };
 
     private static string GetStatusClass(TransactionStatus s) => s switch
     {
-        TransactionStatus.Draft => "status-draft",
-        TransactionStatus.PendingReview => "status-pending",
-        TransactionStatus.Approved => "status-approved",
-        TransactionStatus.InTransit => "status-transit",
-        TransactionStatus.Received => "status-received",
-        TransactionStatus.Confirmed => "status-confirmed",
-        TransactionStatus.Returned => "status-returned",
-        TransactionStatus.Disputed => "status-disputed",
+        TransactionStatus.Sent => "status-pending",
+        TransactionStatus.Received => "status-confirmed",
+        TransactionStatus.Rejected => "status-returned",
         TransactionStatus.Cancelled => "status-cancelled",
         TransactionStatus.Archived => "status-archived",
         _ => ""
@@ -425,14 +542,9 @@
 
     private static string GetStatusIcon(TransactionStatus s) => s switch
     {
-        TransactionStatus.Draft => "bi bi-pencil",
-        TransactionStatus.PendingReview => "bi bi-clock",
-        TransactionStatus.Approved => "bi bi-check-lg",
-        TransactionStatus.InTransit => "bi bi-truck",
-        TransactionStatus.Received => "bi bi-box-seam",
-        TransactionStatus.Confirmed => "bi bi-check-circle-fill",
-        TransactionStatus.Returned => "bi bi-arrow-return-right",
-        TransactionStatus.Disputed => "bi bi-exclamation-triangle",
+        TransactionStatus.Sent => "bi bi-send",
+        TransactionStatus.Received => "bi bi-check-circle-fill",
+        TransactionStatus.Rejected => "bi bi-x-octagon",
         TransactionStatus.Cancelled => "bi bi-x-circle",
         TransactionStatus.Archived => "bi bi-archive",
         _ => "bi bi-circle"
@@ -440,10 +552,17 @@
 
     private static string GetPriorityBadgeClass(TransactionPriority p) => p switch
     {
-        TransactionPriority.Normal => "hb-badge-secondary",
-        TransactionPriority.Important => "hb-badge-primary",
-        TransactionPriority.Urgent => "hb-badge-warning",
-        TransactionPriority.Critical => "hb-badge-danger",
-        _ => ""
+        TransactionPriority.Normal => "hb-badge-success",
+        TransactionPriority.Important => "hb-badge-info",
+        TransactionPriority.Urgent => "hb-badge-danger",
+        _ => "hb-badge-secondary"
+    };
+
+    private static string GetPriorityIcon(TransactionPriority p) => p switch
+    {
+        TransactionPriority.Normal => "bi bi-flag-fill",
+        TransactionPriority.Important => "bi bi-exclamation-circle-fill",
+        TransactionPriority.Urgent => "bi bi-lightning-fill",
+        _ => "bi bi-flag"
     };
 }

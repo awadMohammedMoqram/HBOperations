@@ -14,7 +14,7 @@ public class TransactionSummaryDto
     public string? ReceiverBranchName { get; set; }
     public string? SenderName { get; set; }
     public string? ReceiverName { get; set; }
-    public DateTime? DueDate { get; set; }
+    public DateTime DueDate { get; set; }
     public DateTime CreatedAt { get; set; }
     public int DocumentCount { get; set; }
 }

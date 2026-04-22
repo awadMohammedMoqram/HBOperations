@@ -1,49 +1,40 @@
 namespace HBOperations.Domain.Enums;
 
+/// <summary>
+/// مسار سير العمل المبسّط:
+/// Sent  ──►  Received   (المستلم يؤكد) ──► Archived (تلقائياً)
+///   │   ──►  Rejected   (المستلم يرفض) — حالة نهائية لا تقبل أي تغيير
+///   │   ──►  (Cancel)   (المرسل يلغي قبل الاستلام) ──► حذف نهائي للمعاملة
+/// </summary>
 public enum TransactionStatus
 {
-    Draft = 0,
-    PendingReview = 1,
-    Approved = 2,
-    InTransit = 3,
-    Received = 4,
-    Confirmed = 5,
-    Returned = 6,
-    Disputed = 7,
-    Cancelled = 8,
-    Archived = 9,
-    PendingSecondApproval = 10
+    Sent = 0,         // أُرسلت من المرسل، بانتظار تأكيد الاستلام
+    Received = 1,     // المستلم أكّد الاستلام (نهائية)
+    Rejected = 2,     // المستلم رفض المعاملة مع سبب (نهائية)
+    Cancelled = 3,    // (متروكة للتوافق فقط — الإلغاء الجديد يحذف المعاملة)
+    Archived = 4      // مؤرشفة تلقائياً بعد فترة من Received/Rejected
 }
 
 public enum TransactionType
 {
-    OutgoingFromHQ = 0,
-    IncomingToHQ = 1,
-    BranchToBranch = 2,
-    InternalDepartment = 3,
-    DocumentDelivery = 4,
-    CashTransfer = 5,
-    ReturnedItem = 6,
-    AuditRequest = 7
+    DocumentDelivery = 0,   // تسليم مستندات
+    CashTransfer = 1,       // تحويل نقدي
+    InternalDepartment = 2, // داخلي بين الإدارات
+    BranchToBranch = 3,     // بين الفروع
+    Other = 4               // أخرى
 }
 
 public enum TransactionPriority
 {
     Normal = 0,
     Important = 1,
-    Urgent = 2,
-    Critical = 3
+    Urgent = 2
 }
 
 public enum DocumentType
 {
-    Original = 0,
-    Receipt = 1,
-    Approval = 2,
-    ReturnReason = 3,
-    DisputeEvidence = 4,
-    Confirmation = 5,
-    Attachment = 6
+    Attachment = 0,       // مرفق عام يُضيفه المرسل
+    ProofOfReceipt = 1    // إثبات استلام يرفعه المستلم عند التأكيد
 }
 
 public enum BranchType

@@ -49,6 +49,7 @@
 @code {
     [Parameter] public Guid TransactionId { get; set; }
     [Parameter] public EventCallback OnUploadCompleted { get; set; }
+    [Parameter] public HBOperations.Domain.Enums.DocumentType DocumentType { get; set; } = HBOperations.Domain.Enums.DocumentType.Attachment;
 
     private readonly string _inputId = $"file-upload-{Guid.NewGuid():N}";
     private bool _isDragging;
@@ -108,7 +109,7 @@
                     httpClient.DefaultRequestHeaders.Add("Cookie", httpContext.Request.Headers["Cookie"].ToString());
                 }
                 var response = await httpClient.PostAsync(
-                    $"{baseUri}/api/documents/upload/{TransactionId}", content);
+                    $"{baseUri}/api/documents/upload/{TransactionId}?docType={(int)DocumentType}", content);
 
                 if (!response.IsSuccessStatusCode)
                 {

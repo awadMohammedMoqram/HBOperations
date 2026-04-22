@@ -230,7 +230,7 @@
 
         var cutoff = DateTime.UtcNow.AddDays(-_archiveDays);
         _readyToArchive = await DbContext.Transactions
-            .CountAsync(t => (t.Status == TransactionStatus.Confirmed || t.Status == TransactionStatus.Cancelled)
+            .CountAsync(t => (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Rejected || t.Status == TransactionStatus.Cancelled)
                             && t.CompletedAt.HasValue
                             && t.CompletedAt.Value < cutoff);
     }
@@ -266,7 +266,7 @@
         {
             var cutoff = DateTime.UtcNow.AddDays(-_archiveDays);
             var toArchive = await DbContext.Transactions
-                .Where(t => (t.Status == TransactionStatus.Confirmed || t.Status == TransactionStatus.Cancelled)
+                .Where(t => (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Rejected || t.Status == TransactionStatus.Cancelled)
                             && t.CompletedAt.HasValue && t.CompletedAt.Value < cutoff)
                 .ToListAsync();
 
@@ -318,7 +318,7 @@
             var tx = await DbContext.Transactions.FindAsync(_selectedTx.Id);
             if (tx is null) return;
 
-            tx.Status = TransactionStatus.Confirmed;
+            tx.Status = TransactionStatus.Received;
 
             // Unarchive documents
             var docs = await DbContext.TransactionDocuments
@@ -343,14 +343,11 @@
 
     private static string GetTypeLabel(TransactionType t) => t switch
     {
-        TransactionType.OutgoingFromHQ => "صادر من الإدارة",
-        TransactionType.IncomingToHQ => "وارد للإدارة",
-        TransactionType.BranchToBranch => "بين الفروع",
-        TransactionType.InternalDepartment => "داخلي",
         TransactionType.DocumentDelivery => "تسليم مستندات",
         TransactionType.CashTransfer => "تحويل نقدي",
-        TransactionType.ReturnedItem => "مرتجع",
-        TransactionType.AuditRequest => "طلب تدقيق",
+        TransactionType.InternalDepartment => "داخلي بين الإدارات",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.Other => "أخرى",
         _ => t.ToString()
     };
 }

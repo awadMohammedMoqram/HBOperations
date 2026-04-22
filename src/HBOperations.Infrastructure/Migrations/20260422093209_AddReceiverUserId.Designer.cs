@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace HBOperations.Infrastructure.Data.Migrations
+namespace HBOperations.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260420193956_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20260422093209_AddReceiverUserId")]
+    partial class AddReceiverUserId
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -71,6 +71,8 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.HasIndex("Timestamp");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("Action", "Timestamp");
 
                     b.HasIndex("EntityName", "EntityId");
 
@@ -212,7 +214,58 @@ namespace HBOperations.Infrastructure.Data.Migrations
 
                     b.HasIndex("UserId", "IsRead");
 
+                    b.HasIndex("UserId", "IsRead", "CreatedAt");
+
                     b.ToTable("Notifications");
+                });
+
+            modelBuilder.Entity("HBOperations.Domain.Entities.SystemSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DescriptionAr")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsEditable")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ValueType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("SystemSettings");
                 });
 
             modelBuilder.Entity("HBOperations.Domain.Entities.Transaction", b =>
@@ -243,19 +296,25 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("ReceivedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("ReceivedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid?>("ReceiverBranchId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("ReceiverDepartmentId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("ReceiverUserId")
+                    b.Property<Guid?>("ReceiverUserId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("ReferenceNumber")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("RequireReceiverDocument")
+                        .HasColumnType("bit");
 
                     b.Property<Guid?>("SenderBranchId")
                         .HasColumnType("uniqueidentifier");
@@ -266,7 +325,7 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.Property<Guid>("SenderUserId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTime?>("SentAt")
+                    b.Property<DateTime>("SentAt")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Status")
@@ -291,8 +350,6 @@ namespace HBOperations.Infrastructure.Data.Migrations
 
                     b.HasIndex("Priority");
 
-                    b.HasIndex("ReceiverDepartmentId");
-
                     b.HasIndex("ReferenceNumber")
                         .IsUnique();
 
@@ -303,6 +360,8 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.HasIndex("Type");
 
                     b.HasIndex("ReceiverBranchId", "Status");
+
+                    b.HasIndex("ReceiverDepartmentId", "Status");
 
                     b.HasIndex("ReceiverUserId", "Status");
 
@@ -516,6 +575,9 @@ namespace HBOperations.Infrastructure.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<bool>("ForcePasswordChange")
+                        .HasColumnType("bit");
+
                     b.Property<string>("FullNameAr")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -544,6 +606,9 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.Property<string>("NormalizedUserName")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime?>("PasswordChangedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("nvarchar(max)");

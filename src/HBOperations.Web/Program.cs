@@ -37,6 +37,7 @@ try
 
     builder.Services.AddSignalR();
     builder.Services.AddSingleton<NotificationEventService>();
+    builder.Services.AddScoped<ToastService>();
     builder.Services.AddScoped<IRealTimeNotifier, SignalRNotifier>();
     builder.Services.AddHostedService<AutoArchiveService>();
     builder.Services.AddHttpContextAccessor();
@@ -88,6 +89,29 @@ try
 
     // ── Document API Endpoints ──────────────────────────────────────────
 
+    // Helper: check if user has access to a transaction
+    static bool HasTransactionAccess(ICurrentUserService user, Transaction tx)
+    {
+        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin", "Auditor", "ComplianceOfficer" };
+        if (globalRoles.Any(r => user.IsInRole(r))) return true;
+
+        var uid = user.UserId;
+
+        // المرسل (المُنشئ أو الموظف المُعيَّن كمرسل)
+        if (tx.CreatedByUserId == uid || tx.SenderUserId == uid)
+            return true;
+
+        // الشخص المستلم المُعيَّن
+        if (tx.ReceiverUserId == uid)
+            return true;
+
+        // أي عضو في فرع المرسل (لأغراض المتابعة داخل الفرع)
+        if (tx.SenderBranchId.HasValue && user.BranchId == tx.SenderBranchId)
+            return true;
+
+        return false;
+    }
+
     // Upload document for a transaction
     app.MapPost("/api/documents/upload/{transactionId:guid}", async (
         Guid transactionId,
@@ -95,7 +119,9 @@ try
         IAppDbContext db,
         IFileStorageService storage,
         IFileValidationService validation,
-        HttpContext ctx) =>
+        ICurrentUserService currentUser,
+        HttpContext ctx,
+        int? docType) =>
     {
         var userId = ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (userId is null) return Results.Unauthorized();
@@ -103,6 +129,14 @@ try
         // Check transaction exists
         var transaction = await db.Transactions.FindAsync(transactionId);
         if (transaction is null) return Results.NotFound("المعاملة غير موجودة");
+
+        // Verify user has access to this transaction
+        if (!HasTransactionAccess(currentUser, transaction))
+            return Results.Forbid();
+
+        // Don't allow uploads on terminal statuses
+        if (transaction.Status is TransactionStatus.Cancelled or TransactionStatus.Archived)
+            return Results.BadRequest("لا يمكن إضافة مستندات لمعاملة ملغاة أو مؤرشفة");
 
         // Check document count limit
         var docCount = await db.TransactionDocuments
@@ -138,7 +172,9 @@ try
             FileSizeBytes = result.FileSizeBytes,
             Checksum = result.Checksum,
             ContentType = file.ContentType,
-            DocumentType = DocumentType.Attachment,
+            DocumentType = docType.HasValue && Enum.IsDefined(typeof(DocumentType), docType.Value)
+                ? (DocumentType)docType.Value
+                : DocumentType.Attachment,
             Version = maxVersion + 1,
             UploadedByUserId = Guid.Parse(userId),
             UploadedAt = DateTime.UtcNow
@@ -154,10 +190,17 @@ try
     app.MapGet("/api/documents/{id:guid}/download", async (
         Guid id,
         IAppDbContext db,
-        IFileStorageService storage) =>
+        IFileStorageService storage,
+        ICurrentUserService currentUser) =>
     {
-        var doc = await db.TransactionDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
+        var doc = await db.TransactionDocuments
+            .Include(d => d.Transaction)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == id);
         if (doc is null) return Results.NotFound();
+
+        if (!HasTransactionAccess(currentUser, doc.Transaction))
+            return Results.Forbid();
 
         var stream = await storage.DownloadAsync(doc.StoragePath);
         return Results.File(stream, doc.ContentType, doc.OriginalFileName);
@@ -167,10 +210,17 @@ try
     app.MapGet("/api/documents/{id:guid}/preview", async (
         Guid id,
         IAppDbContext db,
-        IFileStorageService storage) =>
+        IFileStorageService storage,
+        ICurrentUserService currentUser) =>
     {
-        var doc = await db.TransactionDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
+        var doc = await db.TransactionDocuments
+            .Include(d => d.Transaction)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == id);
         if (doc is null) return Results.NotFound();
+
+        if (!HasTransactionAccess(currentUser, doc.Transaction))
+            return Results.Forbid();
 
         var stream = await storage.DownloadAsync(doc.StoragePath);
         return Results.File(stream, "application/pdf");
@@ -180,10 +230,20 @@ try
     app.MapDelete("/api/documents/{id:guid}", async (
         Guid id,
         IAppDbContext db,
-        IFileStorageService storage) =>
+        IFileStorageService storage,
+        ICurrentUserService currentUser) =>
     {
-        var doc = await db.TransactionDocuments.FirstOrDefaultAsync(d => d.Id == id);
+        var doc = await db.TransactionDocuments
+            .Include(d => d.Transaction)
+            .FirstOrDefaultAsync(d => d.Id == id);
         if (doc is null) return Results.NotFound();
+
+        if (!HasTransactionAccess(currentUser, doc.Transaction))
+            return Results.Forbid();
+
+        // Don't allow deletion on terminal statuses
+        if (doc.Transaction.Status is TransactionStatus.Cancelled or TransactionStatus.Archived)
+            return Results.BadRequest("لا يمكن حذف مستندات من معاملة ملغاة أو مؤرشفة");
 
         await storage.DeleteAsync(doc.StoragePath);
         db.TransactionDocuments.Remove(doc);
@@ -193,11 +253,30 @@ try
     }).RequireAuthorization();
 
     // Export branch report to Excel
-    app.MapGet("/api/reports/branches/export", async (IAppDbContext db) =>
+    app.MapGet("/api/reports/branches/export", async (IAppDbContext db, ICurrentUserService currentUser) =>
     {
         var branches = await db.Branches.AsNoTracking()
             .Where(b => b.IsActive).OrderBy(b => b.NameAr).ToListAsync();
-        var txList = await db.Transactions.AsNoTracking()
+
+        // Only SuperAdmin/CEO/ITAdmin see all; everyone else sees only their personal transactions
+        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin" };
+        var hasGlobalAccess = globalRoles.Any(r => currentUser.IsInRole(r));
+        if (!hasGlobalAccess && currentUser.BranchId.HasValue)
+            branches = branches.Where(b => b.Id == currentUser.BranchId.Value).ToList();
+
+        IQueryable<Transaction> txQuery = db.Transactions.AsNoTracking();
+        if (!hasGlobalAccess)
+        {
+            var userId = currentUser.UserId;
+            var branchId = currentUser.BranchId;
+            txQuery = txQuery.Where(t =>
+                t.CreatedByUserId == userId ||
+                t.SenderUserId == userId ||
+                t.ReceiverUserId == userId ||
+                (branchId.HasValue && t.SenderBranchId == branchId));
+        }
+
+        var txList = await txQuery
             .Select(t => new { t.SenderBranchId, t.ReceiverBranchId, t.Status })
             .ToListAsync();
 
@@ -206,7 +285,7 @@ try
         ws.RightToLeft = true;
 
         // Header
-        var headers = new[] { "الفرع", "الصادرة", "الواردة", "الإجمالي", "قيد المراجعة", "مكتملة", "ملغاة" };
+        var headers = new[] { "الفرع", "الصادرة", "الواردة", "الإجمالي", "بانتظار الاستلام", "مستلمة", "ملغاة" };
         for (int i = 0; i < headers.Length; i++)
         {
             ws.Cell(1, i + 1).Value = headers[i];
@@ -221,8 +300,8 @@ try
         {
             var outgoing = txList.Count(t => t.SenderBranchId == b.Id);
             var incoming = txList.Count(t => t.ReceiverBranchId == b.Id);
-            var pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.PendingReview);
-            var completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Confirmed || t.Status == TransactionStatus.Archived));
+            var pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Sent);
+            var completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived));
             var cancelled = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Cancelled);
             var total = outgoing + incoming;
             if (total == 0) continue;
@@ -248,16 +327,38 @@ try
         return Results.File(ms,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"تقرير_الفروع_{DateTime.Now:yyyy-MM-dd}.xlsx");
-    }).RequireAuthorization();
+    }).RequireAuthorization(new Microsoft.AspNetCore.Authorization.AuthorizeAttribute
+    {
+        Roles = "SuperAdmin,CEO,AssistantCEO,DepartmentManager,BranchManager,Auditor,ComplianceOfficer,ITAdmin"
+    });
 
     // Export branch report to PDF
-    app.MapGet("/api/reports/branches/export-pdf", async (IAppDbContext db) =>
+    app.MapGet("/api/reports/branches/export-pdf", async (IAppDbContext db, ICurrentUserService currentUser) =>
     {
         QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
         var branches = await db.Branches.AsNoTracking()
             .Where(b => b.IsActive).OrderBy(b => b.NameAr).ToListAsync();
-        var txList = await db.Transactions.AsNoTracking()
+
+        // Only SuperAdmin/CEO/ITAdmin see all; everyone else sees only their personal transactions
+        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin" };
+        var hasGlobalAccess = globalRoles.Any(r => currentUser.IsInRole(r));
+        if (!hasGlobalAccess && currentUser.BranchId.HasValue)
+            branches = branches.Where(b => b.Id == currentUser.BranchId.Value).ToList();
+
+        IQueryable<Transaction> txQuery = db.Transactions.AsNoTracking();
+        if (!hasGlobalAccess)
+        {
+            var userId = currentUser.UserId;
+            var branchId = currentUser.BranchId;
+            txQuery = txQuery.Where(t =>
+                t.CreatedByUserId == userId ||
+                t.SenderUserId == userId ||
+                t.ReceiverUserId == userId ||
+                (branchId.HasValue && t.SenderBranchId == branchId));
+        }
+
+        var txList = await txQuery
             .Select(t => new { t.SenderBranchId, t.ReceiverBranchId, t.Status })
             .ToListAsync();
 
@@ -273,8 +374,8 @@ try
                 Outgoing = outgoing,
                 Incoming = incoming,
                 Total = total,
-                Pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.PendingReview),
-                Completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Confirmed || t.Status == TransactionStatus.Archived)),
+                Pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Sent),
+                Completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived)),
                 Cancelled = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Cancelled)
             };
         }).Where(x => x != null).ToList();
@@ -299,14 +400,14 @@ try
                         c.RelativeColumn(1); // صادرة
                         c.RelativeColumn(1); // واردة
                         c.RelativeColumn(1); // إجمالي
-                        c.RelativeColumn(1); // قيد المراجعة
+                        c.RelativeColumn(1); // بانتظار الاستلام
                         c.RelativeColumn(1); // مكتملة
                         c.RelativeColumn(1); // ملغاة
                     });
 
                     table.Header(header =>
                     {
-                        foreach (var h in new[] { "الفرع", "الصادرة", "الواردة", "الإجمالي", "قيد المراجعة", "مكتملة", "ملغاة" })
+                        foreach (var h in new[] { "الفرع", "الصادرة", "الواردة", "الإجمالي", "بانتظار الاستلام", "مستلمة", "ملغاة" })
                         {
                             header.Cell().Background("#003d7a").Padding(5)
                                 .Text(h).FontColor("#ffffff").Bold().AlignCenter();
@@ -333,7 +434,10 @@ try
         }).GeneratePdf();
 
         return Results.File(pdfBytes, "application/pdf", $"تقرير_الفروع_{DateTime.Now:yyyy-MM-dd}.pdf");
-    }).RequireAuthorization();
+    }).RequireAuthorization(new Microsoft.AspNetCore.Authorization.AuthorizeAttribute
+    {
+        Roles = "SuperAdmin,CEO,AssistantCEO,DepartmentManager,BranchManager,Auditor,ComplianceOfficer,ITAdmin"
+    });
 
     app.MapStaticAssets();
     app.MapHub<NotificationHub>("/notificationhub");

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace HBOperations.Infrastructure.Data.Migrations
+namespace HBOperations.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -39,6 +39,8 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
                     LastLoginAt = table.Column<DateTime>(type: "datetime2", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    PasswordChangedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    ForcePasswordChange = table.Column<bool>(type: "bit", nullable: false),
                     UserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
@@ -128,6 +130,25 @@ namespace HBOperations.Infrastructure.Data.Migrations
                         principalTable: "Departments",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SystemSettings",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Key = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    Value = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
+                    DescriptionAr = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
+                    Category = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    ValueType = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
+                    IsEditable = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SystemSettings", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -250,11 +271,12 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     SenderUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     SenderBranchId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     SenderDepartmentId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    ReceiverUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     ReceiverBranchId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     ReceiverDepartmentId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    ReceivedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    RequireReceiverDocument = table.Column<bool>(type: "bit", nullable: false),
                     DueDate = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    SentAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    SentAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     ReceivedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
                     CompletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
@@ -432,6 +454,11 @@ namespace HBOperations.Infrastructure.Data.Migrations
                 filter: "[NormalizedUserName] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
+                name: "IX_AuditLogs_Action_Timestamp",
+                table: "AuditLogs",
+                columns: new[] { "Action", "Timestamp" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_AuditLogs_EntityName",
                 table: "AuditLogs",
                 column: "EntityName");
@@ -489,6 +516,22 @@ namespace HBOperations.Infrastructure.Data.Migrations
                 columns: new[] { "UserId", "IsRead" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_Notifications_UserId_IsRead_CreatedAt",
+                table: "Notifications",
+                columns: new[] { "UserId", "IsRead", "CreatedAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SystemSettings_Category",
+                table: "SystemSettings",
+                column: "Category");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SystemSettings_Key",
+                table: "SystemSettings",
+                column: "Key",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_TransactionDocuments_IsArchived",
                 table: "TransactionDocuments",
                 column: "IsArchived");
@@ -539,14 +582,9 @@ namespace HBOperations.Infrastructure.Data.Migrations
                 columns: new[] { "ReceiverBranchId", "Status" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Transactions_ReceiverDepartmentId",
+                name: "IX_Transactions_ReceiverDepartmentId_Status",
                 table: "Transactions",
-                column: "ReceiverDepartmentId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Transactions_ReceiverUserId_Status",
-                table: "Transactions",
-                columns: new[] { "ReceiverUserId", "Status" });
+                columns: new[] { "ReceiverDepartmentId", "Status" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Transactions_ReferenceNumber",
@@ -608,6 +646,9 @@ namespace HBOperations.Infrastructure.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "Notifications");
+
+            migrationBuilder.DropTable(
+                name: "SystemSettings");
 
             migrationBuilder.DropTable(
                 name: "TransactionDocuments");

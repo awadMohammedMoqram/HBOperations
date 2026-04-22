@@ -197,8 +197,89 @@ public static class AppDbContextSeed
                 CreatedAt = DateTime.UtcNow
             };
 
-            await userManager.CreateAsync(user, "Hb@2026pass");
+            var createResult = await userManager.CreateAsync(user, "Hb@2026Pass!");
+            if (!createResult.Succeeded) continue;
             await userManager.AddToRoleAsync(user, role);
+        }
+
+        // ── موظفون تجريبيون عشوائيون ─────────────────────────
+        await SeedRandomStaffAsync(userManager, branches, departments);
+    }
+
+    private static async Task SeedRandomStaffAsync(
+        UserManager<ApplicationUser> userManager,
+        Dictionary<string, Guid> branches,
+        Dictionary<string, Guid> departments)
+    {
+        // أسماء عربية شائعة لتوليد بيانات اختبار
+        string[] firstNames = ["محمد", "أحمد", "علي", "خالد", "سالم", "عبدالله", "حسن", "إبراهيم", "يوسف", "عمر",
+                               "فاطمة", "عائشة", "خديجة", "مريم", "زينب", "هند", "نورا", "سارة", "ريم", "لينا"];
+        string[] lastNames = ["باعمر", "بامطرف", "باحاج", "بن سميط", "العطاس", "الكثيري", "الحامد", "العمودي",
+                              "بازرعة", "بن شيخ", "السقاف", "الشاطري", "بن لادن", "الجابري", "العولقي", "الحمومي"];
+        string[] branchTitles = ["موظف خدمة عملاء", "صراف", "موظف تمويل", "موظف ائتمان", "موظف خزينة فرعية", "موظف خدمات إلكترونية"];
+        string[] deptTitles = ["محلل عمليات", "محاسب", "موظف موارد بشرية", "أخصائي امتثال", "مدقق داخلي", "أخصائي مخاطر", "مهندس برمجيات", "أخصائي جودة"];
+
+        var rnd = new Random(42); // ثابت لإنتاج بيانات قابلة للتكرار
+
+        // 5 موظفين لكل فرع غير HQ
+        var nonHqBranches = branches.Where(kv => kv.Key != "HQ").ToList();
+        int counter = 1;
+        foreach (var (branchCode, branchId) in nonHqBranches)
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                var first = firstNames[rnd.Next(firstNames.Length)];
+                var last = lastNames[rnd.Next(lastNames.Length)];
+                var title = branchTitles[rnd.Next(branchTitles.Length)];
+                var email = $"staff{counter:D3}.{branchCode.ToLower()}@hb.com";
+                counter++;
+                if (await userManager.FindByEmailAsync(email) is not null) continue;
+
+                var user = new ApplicationUser
+                {
+                    UserName = email,
+                    Email = email,
+                    FullNameAr = $"{first} {last}",
+                    JobTitle = title,
+                    EmailConfirmed = true,
+                    BranchId = branchId,
+                    DepartmentId = null,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                var res = await userManager.CreateAsync(user, "Hb@2026Pass!");
+                if (res.Succeeded) await userManager.AddToRoleAsync(user, "BranchStaff");
+            }
+        }
+
+        // 3 موظفين لكل إدارة في HQ
+        var hqId = branches.GetValueOrDefault("HQ");
+        foreach (var (deptCode, deptId) in departments)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                var first = firstNames[rnd.Next(firstNames.Length)];
+                var last = lastNames[rnd.Next(lastNames.Length)];
+                var title = deptTitles[rnd.Next(deptTitles.Length)];
+                var email = $"staff{counter:D3}.{deptCode.ToLower()}@hb.com";
+                counter++;
+                if (await userManager.FindByEmailAsync(email) is not null) continue;
+
+                var user = new ApplicationUser
+                {
+                    UserName = email,
+                    Email = email,
+                    FullNameAr = $"{first} {last}",
+                    JobTitle = title,
+                    EmailConfirmed = true,
+                    BranchId = hqId,
+                    DepartmentId = deptId,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                var res = await userManager.CreateAsync(user, "Hb@2026Pass!");
+                if (res.Succeeded) await userManager.AddToRoleAsync(user, "DepartmentStaff");
+            }
         }
     }
 

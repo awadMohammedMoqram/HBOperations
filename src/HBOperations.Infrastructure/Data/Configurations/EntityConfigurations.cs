@@ -12,6 +12,9 @@ public class TransactionConfiguration : IEntityTypeConfiguration<Transaction>
         builder.Property(t => t.ReferenceNumber).HasMaxLength(50).IsRequired();
         builder.Property(t => t.Subject).HasMaxLength(200).IsRequired();
         builder.Property(t => t.Description).HasMaxLength(2000);
+        builder.Property(t => t.SenderNote).HasMaxLength(1000);
+        builder.Property(t => t.ReceiverNote).HasMaxLength(1000);
+        builder.Property(t => t.RejectionNote).HasMaxLength(1000);
 
         builder.HasIndex(t => t.ReferenceNumber).IsUnique();
         builder.HasIndex(t => t.Status);
@@ -23,6 +26,7 @@ public class TransactionConfiguration : IEntityTypeConfiguration<Transaction>
         builder.HasIndex(t => new { t.ReceiverBranchId, t.Status });
         builder.HasIndex(t => new { t.SenderUserId, t.Status });
         builder.HasIndex(t => new { t.ReceiverUserId, t.Status });
+        builder.HasIndex(t => new { t.ReceiverDepartmentId, t.Status });
         builder.HasIndex(t => new { t.Status, t.CreatedAt });
 
         builder.HasOne(t => t.SenderBranch)

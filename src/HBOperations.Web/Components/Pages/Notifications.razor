@@ -6,6 +6,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IAppDbContext DbContext
 @inject ICurrentUserService CurrentUser
+@inject NavigationManager Navigation
 
 <PageTitle>الإشعارات - بنك حضرموت</PageTitle>
 
@@ -61,7 +62,7 @@
         <div class="notifications-list">
             @foreach (var notif in _notifications)
             {
-                <div class="notif-item @(notif.IsRead ? "" : "unread")" @onclick="() => MarkAsRead(notif)">
+                <div class="notif-item @(notif.IsRead ? "" : "unread") @(notif.TransactionId.HasValue ? "clickable" : "")" @onclick="() => HandleNotifClick(notif)">
                     <div class="notif-icon @GetNotifIconClass(notif.Type)">
                         <i class="bi @GetNotifIcon(notif.Type)"></i>
                     </div>
@@ -78,9 +79,7 @@
                     }
                     @if (notif.TransactionId.HasValue)
                     {
-                        <a href="/transactions/@notif.TransactionId" class="notif-link" @onclick:stopPropagation="true">
-                            <i class="bi bi-box-arrow-in-left"></i>
-                        </a>
+                        <span class="notif-link-icon"><i class="bi bi-chevron-left"></i></span>
                     }
                 </div>
             }
@@ -102,6 +101,28 @@
             .ToListAsync();
 
         _loading = false;
+    }
+
+    private async Task HandleNotifClick(HBOperations.Domain.Entities.Notification notif)
+    {
+        // Mark as read
+        if (!notif.IsRead)
+        {
+            var entity = await DbContext.Notifications.FindAsync(notif.Id);
+            if (entity is not null)
+            {
+                entity.IsRead = true;
+                entity.ReadAt = DateTime.UtcNow;
+                await DbContext.SaveChangesAsync();
+                notif.IsRead = true;
+            }
+        }
+
+        // Navigate to transaction detail if linked
+        if (notif.TransactionId.HasValue)
+        {
+            Navigation.NavigateTo($"/transactions/{notif.TransactionId}");
+        }
     }
 
     private async Task MarkAsRead(HBOperations.Domain.Entities.Notification notif)

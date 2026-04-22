@@ -190,6 +190,18 @@
     color: white;
 }
 
+.action-btn.reject {
+    background: rgba(211, 47, 47, 0.1);
+    color: #d32f2f;
+    border: none;
+    cursor: pointer;
+}
+
+.action-btn.reject:hover {
+    background: #d32f2f;
+    color: white;
+}
+
 /* Modal */
 .modal-overlay {
     position: fixed;

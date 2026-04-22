@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace HBOperations.Infrastructure.Data.Migrations
+namespace HBOperations.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260421113229_AddDualApprovalAndPasswordExpiry")]
-    partial class AddDualApprovalAndPasswordExpiry
+    [Migration("20260422085450_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -290,17 +290,14 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime?>("FirstApprovedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("FirstApprovedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<int>("Priority")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ReceivedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ReceivedByUserId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("ReceiverBranchId")
                         .HasColumnType("uniqueidentifier");
@@ -308,19 +305,13 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.Property<Guid?>("ReceiverDepartmentId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("ReceiverUserId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<string>("ReferenceNumber")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime?>("SecondApprovedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("SecondApprovedByUserId")
-                        .HasColumnType("uniqueidentifier");
+                    b.Property<bool>("RequireReceiverDocument")
+                        .HasColumnType("bit");
 
                     b.Property<Guid?>("SenderBranchId")
                         .HasColumnType("uniqueidentifier");
@@ -331,7 +322,7 @@ namespace HBOperations.Infrastructure.Data.Migrations
                     b.Property<Guid>("SenderUserId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTime?>("SentAt")
+                    b.Property<DateTime>("SentAt")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Status")
@@ -356,8 +347,6 @@ namespace HBOperations.Infrastructure.Data.Migrations
 
                     b.HasIndex("Priority");
 
-                    b.HasIndex("ReceiverDepartmentId");
-
                     b.HasIndex("ReferenceNumber")
                         .IsUnique();
 
@@ -369,7 +358,7 @@ namespace HBOperations.Infrastructure.Data.Migrations
 
                     b.HasIndex("ReceiverBranchId", "Status");
 
-                    b.HasIndex("ReceiverUserId", "Status");
+                    b.HasIndex("ReceiverDepartmentId", "Status");
 
                     b.HasIndex("SenderBranchId", "Status");
 

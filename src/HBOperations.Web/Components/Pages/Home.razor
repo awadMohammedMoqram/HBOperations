@@ -50,7 +50,7 @@
                     <div class="stat-icon"><i class="bi bi-hourglass-split"></i></div>
                     <div class="stat-info">
                         <span class="stat-number">@_pendingTransactions</span>
-                        <span class="stat-label">قيد المراجعة</span>
+                        <span class="stat-label">بانتظار الاستلام</span>
                     </div>
                 </a>
                 <a href="/transactions?priority=urgent" class="stat-card stat-urgent">
@@ -71,61 +71,31 @@
         </div>
     </section>
 
-    <!-- Quick Actions -->
-    <section class="quick-actions-section">
-        <div class="container">
-            <h2 class="hb-section-title">إجراءات سريعة</h2>
-            <div class="actions-grid">
-                <a href="/transactions/create" class="action-card">
-                    <div class="action-icon action-icon-primary"><i class="bi bi-plus-circle-fill"></i></div>
-                    <h3>معاملة جديدة</h3>
-                    <p>إنشاء معاملة جديدة</p>
-                </a>
-                <a href="/transactions" class="action-card">
-                    <div class="action-icon action-icon-gold"><i class="bi bi-file-earmark-text-fill"></i></div>
-                    <h3>المعاملات</h3>
-                    <p>عرض وإدارة المعاملات</p>
-                </a>
-                <a href="/reports" class="action-card">
-                    <div class="action-icon action-icon-purple"><i class="bi bi-graph-up-arrow"></i></div>
-                    <h3>التقارير</h3>
-                    <p>تقارير الأداء والفروع</p>
-                </a>
-                <a href="/archive" class="action-card">
-                    <div class="action-icon action-icon-secondary"><i class="bi bi-archive-fill"></i></div>
-                    <h3>الأرشيف</h3>
-                    <p>المعاملات المؤرشفة</p>
-                </a>
-                <a href="/branches" class="action-card">
-                    <div class="action-icon action-icon-success"><i class="bi bi-building"></i></div>
-                    <h3>الفروع</h3>
-                    <p>إدارة الفروع والمكاتب</p>
-                </a>
-                <a href="/departments" class="action-card">
-                    <div class="action-icon action-icon-info"><i class="bi bi-diagram-3-fill"></i></div>
-                    <h3>الأقسام</h3>
-                    <p>إدارة الأقسام والإدارات</p>
-                </a>
-                <AuthorizeView Roles="SuperAdmin,ITAdmin">
-                    <a href="/users" class="action-card">
-                        <div class="action-icon action-icon-warning"><i class="bi bi-people-fill"></i></div>
-                        <h3>المستخدمين</h3>
-                        <p>إدارة حسابات المستخدمين</p>
-                    </a>
-                    <a href="/audit-log" class="action-card">
-                        <div class="action-icon action-icon-danger"><i class="bi bi-clipboard-data-fill"></i></div>
-                        <h3>سجل المراجعة</h3>
-                        <p>سجل العمليات والتغييرات</p>
-                    </a>
-                </AuthorizeView>
-            </div>
-        </div>
-    </section>
-
-    <!-- Status Breakdown + Recent Transactions -->
-    <section class="dashboard-content">
+    <!-- Weekly Activity + Status Distribution -->
+    <section class="charts-section">
         <div class="container">
             <div class="content-grid">
+                <!-- Weekly Activity Chart (Last 7 days) -->
+                <div class="hb-card chart-card">
+                    <h3 class="card-title"><i class="bi bi-bar-chart-fill"></i> نشاط الأسبوع</h3>
+                    <div class="bar-chart">
+                        @{
+                            var maxDayCount = _weeklyData.Values.Any() ? _weeklyData.Values.Max() : 1;
+                        }
+                        @foreach (var day in _weeklyData)
+                        {
+                            var heightPercent = maxDayCount > 0 ? (double)day.Value / maxDayCount * 100 : 0;
+                            <div class="bar-column">
+                                <span class="bar-value">@day.Value</span>
+                                <div class="bar-fill-wrapper">
+                                    <div class="bar-fill" style="height: @heightPercent.ToString("F0")%"></div>
+                                </div>
+                                <span class="bar-label">@day.Key</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
                 <!-- Status Breakdown -->
                 <div class="status-breakdown-card hb-card">
                     <h3 class="card-title"><i class="bi bi-pie-chart-fill"></i> توزيع الحالات</h3>
@@ -133,13 +103,21 @@
                         @foreach (var item in _statusBreakdown.OrderByDescending(x => x.Value))
                         {
                             var percent = _totalTransactions > 0 ? (double)item.Value / _totalTransactions * 100 : 0;
-                            <div class="status-bar-item">
+                            var barCls = GetStatusBarClass(item.Key);
+                            var tone   = GetStatusToneClass(item.Key);
+                            <div class="status-bar-item @tone">
                                 <div class="status-bar-header">
-                                    <span class="status-bar-label">@GetStatusLabel(item.Key)</span>
-                                    <span class="status-bar-count">@item.Value</span>
+                                    <span class="status-bar-label">
+                                        <span class="status-bar-icon-wrap"><i class="@GetStatusIconClass(item.Key)"></i></span>
+                                        @GetStatusLabel(item.Key)
+                                    </span>
+                                    <span class="status-bar-count">
+                                        @item.Value
+                                        <span class="status-bar-percent">(@percent.ToString("F0")%)</span>
+                                    </span>
                                 </div>
                                 <div class="status-bar-track">
-                                    <div class="status-bar-fill @GetStatusBarClass(item.Key)" style="width: @percent.ToString("F0")%"></div>
+                                    <div class="status-bar-fill @barCls" style="width: @percent.ToString("F0")%"></div>
                                 </div>
                             </div>
                         }
@@ -152,7 +130,14 @@
                         }
                     </div>
                 </div>
+            </div>
+        </div>
+    </section>
 
+    <!-- Recent Transactions + Type Distribution -->
+    <section class="dashboard-content">
+        <div class="container">
+            <div class="content-grid">
                 <!-- Recent Transactions -->
                 <div class="recent-transactions-card hb-card">
                     <div class="card-title-row">
@@ -188,34 +173,6 @@
                         </div>
                     }
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Charts Row: Weekly Activity + Type Distribution -->
-    <section class="charts-section">
-        <div class="container">
-            <div class="content-grid">
-                <!-- Weekly Activity Chart (Last 7 days) -->
-                <div class="hb-card chart-card">
-                    <h3 class="card-title"><i class="bi bi-bar-chart-fill"></i> نشاط الأسبوع</h3>
-                    <div class="bar-chart">
-                        @{
-                            var maxDayCount = _weeklyData.Values.Any() ? _weeklyData.Values.Max() : 1;
-                        }
-                        @foreach (var day in _weeklyData)
-                        {
-                            var heightPercent = maxDayCount > 0 ? (double)day.Value / maxDayCount * 100 : 0;
-                            <div class="bar-column">
-                                <span class="bar-value">@day.Value</span>
-                                <div class="bar-fill-wrapper">
-                                    <div class="bar-fill" style="height: @heightPercent.ToString("F0")%"></div>
-                                </div>
-                                <span class="bar-label">@day.Key</span>
-                            </div>
-                        }
-                    </div>
-                </div>
 
                 <!-- Type Distribution -->
                 <div class="hb-card chart-card">
@@ -249,6 +206,57 @@
         </div>
     </section>
 
+    <!-- Quick Actions -->
+    <section class="quick-actions-section">
+        <div class="container">
+            <h2 class="hb-section-title">إجراءات سريعة</h2>
+            <div class="actions-grid">
+                <a href="/transactions/create" class="action-card">
+                    <div class="action-icon action-icon-primary"><i class="bi bi-plus-circle-fill"></i></div>
+                    <h3>معاملة جديدة</h3>
+                    <p>إنشاء معاملة جديدة</p>
+                </a>
+                <a href="/transactions" class="action-card">
+                    <div class="action-icon action-icon-gold"><i class="bi bi-file-earmark-text-fill"></i></div>
+                    <h3>المعاملات</h3>
+                    <p>عرض وإدارة المعاملات</p>
+                </a>
+                <a href="/reports" class="action-card">
+                    <div class="action-icon action-icon-purple"><i class="bi bi-graph-up-arrow"></i></div>
+                    <h3>التقارير</h3>
+                    <p>تقارير الأداء والفروع</p>
+                </a>
+                <a href="/archive" class="action-card">
+                    <div class="action-icon action-icon-secondary"><i class="bi bi-archive-fill"></i></div>
+                    <h3>الأرشيف</h3>
+                    <p>المعاملات المؤرشفة</p>
+                </a>
+                <AuthorizeView Roles="SuperAdmin,ITAdmin">
+                    <a href="/branches" class="action-card">
+                        <div class="action-icon action-icon-success"><i class="bi bi-building"></i></div>
+                        <h3>الفروع</h3>
+                        <p>إدارة الفروع والمكاتب</p>
+                    </a>
+                    <a href="/departments" class="action-card">
+                        <div class="action-icon action-icon-info"><i class="bi bi-diagram-3-fill"></i></div>
+                        <h3>الأقسام</h3>
+                        <p>إدارة الأقسام والإدارات</p>
+                    </a>
+                    <a href="/users" class="action-card">
+                        <div class="action-icon action-icon-warning"><i class="bi bi-people-fill"></i></div>
+                        <h3>المستخدمين</h3>
+                        <p>إدارة حسابات المستخدمين</p>
+                    </a>
+                    <a href="/audit-log" class="action-card">
+                        <div class="action-icon action-icon-danger"><i class="bi bi-clipboard-data-fill"></i></div>
+                        <h3>سجل المراجعة</h3>
+                        <p>سجل العمليات والتغييرات</p>
+                    </a>
+                </AuthorizeView>
+            </div>
+        </div>
+    </section>
+
 </div>
 
 @code {
@@ -262,31 +270,30 @@
     {
         var now = DateTime.UtcNow;
 
-        // Global roles see all; others see only their branch/department
-        var globalRoles = new[] { "SuperAdmin", "CEO", "Auditor", "ComplianceOfficer", "ITAdmin" };
+        // Only SuperAdmin/CEO/ITAdmin see all; everyone else sees only their personal transactions
+        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin" };
         var hasGlobalAccess = globalRoles.Any(r => CurrentUser.IsInRole(r));
 
         IQueryable<HBOperations.Domain.Entities.Transaction> transactions = DbContext.Transactions.AsNoTracking();
 
         if (!hasGlobalAccess)
         {
+            var userId = CurrentUser.UserId;
             var branchId = CurrentUser.BranchId;
             var deptId = CurrentUser.DepartmentId;
-            var userId = CurrentUser.UserId;
 
             transactions = transactions.Where(t =>
                 t.CreatedByUserId == userId ||
                 t.SenderUserId == userId ||
-                t.ReceiverUserId == userId ||
-                (branchId != null && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
-                (deptId != null && (t.SenderDepartmentId == deptId || t.ReceiverDepartmentId == deptId)));
+                (branchId.HasValue && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
+                t.ReceiverUserId == userId || (deptId.HasValue && t.SenderDepartmentId == deptId));
         }
 
         _totalTransactions = await transactions.CountAsync();
         _todayTransactions = await transactions.CountAsync(t => t.CreatedAt.Date == now.Date);
-        _pendingTransactions = await transactions.CountAsync(t => t.Status == TransactionStatus.PendingReview);
-        _urgentTransactions = await transactions.CountAsync(t => t.Priority >= TransactionPriority.Urgent && t.Status != TransactionStatus.Archived && t.Status != TransactionStatus.Cancelled);
-        _overdueTransactions = await transactions.CountAsync(t => t.DueDate.HasValue && t.DueDate < now && t.Status != TransactionStatus.Archived && t.Status != TransactionStatus.Cancelled && t.Status != TransactionStatus.Confirmed);
+        _pendingTransactions = await transactions.CountAsync(t => t.Status == TransactionStatus.Sent);
+        _urgentTransactions = await transactions.CountAsync(t => t.Priority >= TransactionPriority.Urgent && t.Status == TransactionStatus.Sent);
+        _overdueTransactions = await transactions.CountAsync(t => t.DueDate.HasValue && t.DueDate < now && t.Status == TransactionStatus.Sent);
 
         _statusBreakdown = await transactions
             .GroupBy(t => t.Status)
@@ -298,20 +305,28 @@
             .Select(g => new { Type = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Type, x => x.Count);
 
-        // Weekly data: last 7 days
-        var weekStart = now.Date.AddDays(-6);
+        // Weekly data: current week starting from Saturday
+        // Find the most recent Saturday (start of week)
+        var today = now.Date;
+        var daysSinceSaturday = ((int)today.DayOfWeek + 1) % 7; // Saturday=0 offset
+        var weekStartSat = today.AddDays(-daysSinceSaturday);
+        var weekEndFri = weekStartSat.AddDays(6);
+
         var weeklyRaw = await transactions
-            .Where(t => t.CreatedAt >= weekStart)
+            .Where(t => t.CreatedAt.Date >= weekStartSat && t.CreatedAt.Date <= weekEndFri)
             .GroupBy(t => t.CreatedAt.Date)
             .Select(g => new { Date = g.Key, Count = g.Count() })
             .ToListAsync();
 
-        var dayNames = new[] { "أحد", "إثن", "ثلاث", "أربع", "خمس", "جمعة", "سبت" };
+        // Arabic day names indexed by DayOfWeek: Sun=0..Sat=6
+        var dayNames = new[] { "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت" };
+        // Order: Saturday first, then Sun..Fri
+        var weekOrder = new[] { DayOfWeek.Saturday, DayOfWeek.Sunday, DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
         _weeklyData = new Dictionary<string, int>();
-        for (var i = 6; i >= 0; i--)
+        foreach (var dow in weekOrder)
         {
-            var date = now.Date.AddDays(-i);
-            var dayName = dayNames[(int)date.DayOfWeek];
+            var date = weekStartSat.AddDays(((int)dow + 1) % 7);
+            var dayName = dayNames[(int)dow];
             var count = weeklyRaw.FirstOrDefault(x => x.Date == date)?.Count ?? 0;
             _weeklyData[dayName] = count;
         }
@@ -324,14 +339,9 @@
 
     private static string GetStatusLabel(TransactionStatus s) => s switch
     {
-        TransactionStatus.Draft => "مسودة",
-        TransactionStatus.PendingReview => "قيد المراجعة",
-        TransactionStatus.Approved => "معتمدة",
-        TransactionStatus.InTransit => "قيد التسليم",
-        TransactionStatus.Received => "مستلمة",
-        TransactionStatus.Confirmed => "مؤكدة",
-        TransactionStatus.Returned => "مرتجعة",
-        TransactionStatus.Disputed => "متنازع عليها",
+        TransactionStatus.Sent => "بانتظار الاستلام",
+        TransactionStatus.Received => "تم الاستلام",
+        TransactionStatus.Rejected => "مرفوضة",
         TransactionStatus.Cancelled => "ملغاة",
         TransactionStatus.Archived => "مؤرشفة",
         _ => s.ToString()
@@ -339,60 +349,70 @@
 
     private static string GetStatusBadge(TransactionStatus s) => s switch
     {
-        TransactionStatus.Draft => "secondary",
-        TransactionStatus.PendingReview => "warning",
-        TransactionStatus.Approved => "info",
-        TransactionStatus.InTransit => "primary",
+        TransactionStatus.Sent => "warning",
         TransactionStatus.Received => "success",
-        TransactionStatus.Confirmed => "success",
-        TransactionStatus.Returned => "danger",
-        TransactionStatus.Disputed => "danger",
-        TransactionStatus.Cancelled => "secondary",
-        TransactionStatus.Archived => "secondary",
+        TransactionStatus.Rejected => "danger",
+        TransactionStatus.Cancelled => "cancelled",
+        TransactionStatus.Archived => "archived",
         _ => "secondary"
     };
 
     private static string GetStatusBarClass(TransactionStatus s) => s switch
     {
-        TransactionStatus.Draft => "bar-gray",
-        TransactionStatus.PendingReview => "bar-warning",
-        TransactionStatus.Approved => "bar-info",
-        TransactionStatus.InTransit => "bar-primary",
-        TransactionStatus.Received or TransactionStatus.Confirmed => "bar-success",
-        TransactionStatus.Returned or TransactionStatus.Disputed => "bar-danger",
+        TransactionStatus.Sent => "bar-warning",
+        TransactionStatus.Received => "bar-success",
+        TransactionStatus.Rejected => "bar-danger",
+        TransactionStatus.Cancelled => "bar-cancelled",
+        TransactionStatus.Archived => "bar-archived",
         _ => "bar-gray"
+    };
+
+    private static string GetStatusIconClass(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Sent => "bi bi-send-fill",
+        TransactionStatus.Received => "bi bi-check-circle-fill",
+        TransactionStatus.Rejected => "bi bi-x-octagon-fill",
+        TransactionStatus.Cancelled => "bi bi-slash-circle-fill",
+        TransactionStatus.Archived => "bi bi-archive-fill",
+        _ => "bi bi-circle"
+    };
+
+    private static string GetStatusToneClass(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Sent => "tone-warning",
+        TransactionStatus.Received => "tone-success",
+        TransactionStatus.Rejected => "tone-danger",
+        TransactionStatus.Cancelled => "tone-cancelled",
+        TransactionStatus.Archived => "tone-archived",
+        _ => "tone-gray"
     };
 
     private static string GetTypeIcon(TransactionType t) => t switch
     {
-        TransactionType.OutgoingFromHQ => "bi-arrow-up-left-circle",
-        TransactionType.IncomingToHQ => "bi-arrow-down-right-circle",
         TransactionType.BranchToBranch => "bi-arrow-left-right",
         TransactionType.CashTransfer => "bi-cash-stack",
         TransactionType.DocumentDelivery => "bi-file-earmark-arrow-up",
+        TransactionType.InternalDepartment => "bi-diagram-3",
         _ => "bi-file-earmark-text"
     };
 
     private static string GetTypeLabel(TransactionType t) => t switch
     {
-        TransactionType.OutgoingFromHQ => "صادر من الإدارة",
-        TransactionType.IncomingToHQ => "وارد للإدارة",
-        TransactionType.BranchToBranch => "بين الفروع",
-        TransactionType.InternalDepartment => "داخلي",
         TransactionType.DocumentDelivery => "تسليم مستندات",
         TransactionType.CashTransfer => "تحويل نقدي",
-        TransactionType.ReturnedItem => "مرتجع",
-        TransactionType.AuditRequest => "طلب تدقيق",
+        TransactionType.InternalDepartment => "داخلي بين الإدارات",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.Other => "أخرى",
         _ => t.ToString()
     };
 
     private static string GetTypeColorClass(TransactionType t) => t switch
     {
-        TransactionType.OutgoingFromHQ => "type-color-primary",
-        TransactionType.IncomingToHQ => "type-color-gold",
-        TransactionType.BranchToBranch => "type-color-info",
+        TransactionType.DocumentDelivery => "type-color-primary",
         TransactionType.CashTransfer => "type-color-success",
-        TransactionType.DocumentDelivery => "type-color-warning",
+        TransactionType.InternalDepartment => "type-color-warning",
+        TransactionType.BranchToBranch => "type-color-info",
+        TransactionType.Other => "type-color-secondary",
         _ => "type-color-secondary"
     };
 }

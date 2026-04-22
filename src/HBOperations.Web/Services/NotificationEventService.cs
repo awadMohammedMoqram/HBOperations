@@ -1,16 +1,25 @@
 namespace HBOperations.Web.Services;
 
+public record NotificationPayload(Guid UserId, string Title, string Message, Guid? TransactionId);
+
 /// <summary>
 /// In-process notification event bus for Blazor Server components.
-/// Components subscribe to receive real-time notification count updates.
+/// Components subscribe to receive real-time notification updates.
 /// </summary>
 public class NotificationEventService
 {
-    public event Func<Guid, Task>? OnNotification;
+    public event Func<NotificationPayload, Task>? OnNotification;
+    public event Func<Guid, Task>? OnRefresh;
 
-    public async Task RaiseAsync(Guid userId)
+    public async Task RaiseAsync(NotificationPayload payload)
     {
         if (OnNotification is not null)
-            await OnNotification.Invoke(userId);
+            await OnNotification.Invoke(payload);
+    }
+
+    public async Task RaiseRefreshAsync(Guid userId)
+    {
+        if (OnRefresh is not null)
+            await OnRefresh.Invoke(userId);
     }
 }

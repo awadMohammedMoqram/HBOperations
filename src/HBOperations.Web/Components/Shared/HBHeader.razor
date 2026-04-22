@@ -70,34 +70,62 @@
     [Inject] private IServiceScopeFactory ScopeFactory { get; set; } = default!;
     [Inject] private ICurrentUserService CurrentUser { get; set; } = default!;
     [Inject] private NotificationEventService NotificationEvents { get; set; } = default!;
+    [Inject] private Microsoft.JSInterop.IJSRuntime JS { get; set; } = default!;
 
     private bool isMobileMenuOpen;
     private int _unreadCount;
+    private bool _permissionAsked;
 
     protected override async Task OnInitializedAsync()
     {
         Navigation.LocationChanged += OnLocationChanged;
 
-        // Load unread count using a separate scope to avoid concurrent DbContext access
         if (CurrentUser.UserId != Guid.Empty)
         {
-            using var scope = ScopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
-            _unreadCount = await db.Notifications
-                .CountAsync(n => n.UserId == CurrentUser.UserId && !n.IsRead);
+            await ReloadUnreadCount();
         }
 
         // Subscribe to in-process notification events
         NotificationEvents.OnNotification += OnNotificationReceived;
+        NotificationEvents.OnRefresh += OnRefreshRequested;
     }
 
-    private async Task OnNotificationReceived(Guid userId)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (userId == CurrentUser.UserId)
+        if (firstRender && !_permissionAsked && CurrentUser.UserId != Guid.Empty)
         {
-            _unreadCount++;
-            await InvokeAsync(StateHasChanged);
+            _permissionAsked = true;
+            try { await JS.InvokeAsync<string>("hbNotifications.requestPermission"); }
+            catch { /* JS not ready or unsupported */ }
         }
+    }
+
+    private async Task ReloadUnreadCount()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
+        _unreadCount = await db.Notifications
+            .CountAsync(n => n.UserId == CurrentUser.UserId && !n.IsRead);
+    }
+
+    private async Task OnNotificationReceived(NotificationPayload payload)
+    {
+        if (payload.UserId != CurrentUser.UserId) return;
+        _unreadCount++;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await JS.InvokeVoidAsync("hbNotifications.show",
+                payload.Title, payload.Message, payload.TransactionId);
+        }
+        catch { /* swallow JS errors */ }
+    }
+
+    private async Task OnRefreshRequested(Guid userId)
+    {
+        if (userId != CurrentUser.UserId) return;
+        await ReloadUnreadCount();
+        await InvokeAsync(StateHasChanged);
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
@@ -116,5 +144,7 @@
     {
         Navigation.LocationChanged -= OnLocationChanged;
         NotificationEvents.OnNotification -= OnNotificationReceived;
+        NotificationEvents.OnRefresh -= OnRefreshRequested;
+        await ValueTask.CompletedTask;
     }
 }

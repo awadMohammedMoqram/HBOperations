@@ -1,6 +1,6 @@
 @page "/transactions/create"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "SuperAdmin,DepartmentManager,BranchManager,OfficeManager,DepartmentStaff,BranchStaff")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using HBOperations.Application.Common.Interfaces
 @using HBOperations.Domain.Entities
 @using HBOperations.Domain.Enums
@@ -12,28 +12,22 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+@inject INotificationService NotificationService
+@inject IFileStorageService FileStorage
+@inject IFileValidationService FileValidation
 
 <PageTitle>معاملة جديدة - بنك حضرموت</PageTitle>
 
 <div class="page-container hb-fade-in">
-    <div class="page-title-section">
-        <div class="title-with-action">
-            <div>
-                <h1 class="section-title"><i class="bi bi-plus-circle"></i> إنشاء معاملة جديدة</h1>
-                <p class="section-subtitle">إنشاء معاملة استلام أو تسليم جديدة بين الإدارة والفروع</p>
-            </div>
-            <button type="button" class="btn-hb-outline btn-back" @onclick="GoBack">
-                <i class="bi bi-arrow-right"></i> العودة
-            </button>
+    <div class="page-title-section centered-header">
+        <button type="button" class="btn-hb-outline btn-back back-floating" @onclick="GoBack">
+            <i class="bi bi-arrow-right"></i> العودة
+        </button>
+        <div class="centered-title-block">
+            <h1 class="section-title"><i class="bi bi-plus-circle"></i> إنشاء معاملة جديدة</h1>
+            <p class="section-subtitle">يتم إرسال المعاملة للمستلم مباشرةً بمجرد الإنشاء</p>
         </div>
     </div>
-
-    @if (!string.IsNullOrEmpty(_successMessage))
-    {
-        <div class="hb-alert hb-alert-success">
-            <i class="bi bi-check-circle-fill"></i> @_successMessage
-        </div>
-    }
 
     @if (!string.IsNullOrEmpty(_errorMessage))
     {
@@ -50,84 +44,184 @@
 
             <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="CreateTransaction">
                 <div class="form-grid">
-                    <!-- الموضوع -->
+                    <div class="hb-form-group full-width sender-info-banner">
+                        <label class="hb-form-label">
+                            <i class="bi bi-person-badge"></i> المرسل
+                        </label>
+                        <div class="sender-readonly">
+                            <span class="sender-name">@CurrentUser.UserName</span>
+                            @if (_currentBranchName is not null)
+                            {
+                                <span class="sender-meta"><i class="bi bi-building"></i> @_currentBranchName</span>
+                            }
+                            @if (_currentDepartmentName is not null)
+                            {
+                                <span class="sender-meta"><i class="bi bi-diagram-3"></i> @_currentDepartmentName</span>
+                            }
+                        </div>
+                    </div>
+
                     <div class="hb-form-group full-width">
-                        <label class="hb-form-label">الموضوع *</label>
+                        <label class="hb-form-label">الموضوع <span class="required-star">*</span></label>
                         <InputText @bind-Value="_model.Subject" class="hb-form-control" placeholder="أدخل موضوع المعاملة" />
                     </div>
 
-                    <!-- الوصف -->
                     <div class="hb-form-group full-width">
                         <label class="hb-form-label">الوصف</label>
                         <InputTextArea @bind-Value="_model.Description" class="hb-form-control textarea" rows="3"
                                        placeholder="وصف تفصيلي للمعاملة (اختياري)" />
                     </div>
 
-                    <!-- النوع -->
                     <div class="hb-form-group">
-                        <label class="hb-form-label">نوع المعاملة *</label>
+                        <label class="hb-form-label">نوع المعاملة <span class="required-star">*</span></label>
                         <InputSelect @bind-Value="_model.Type" class="hb-form-control">
-                            @foreach (var type in Enum.GetValues<TransactionType>())
+                            @foreach (var t in Enum.GetValues<TransactionType>())
                             {
-                                <option value="@type">@GetTypeLabel(type)</option>
+                                <option value="@t">@GetTypeLabel(t)</option>
                             }
                         </InputSelect>
                     </div>
 
-                    <!-- الأولوية -->
                     <div class="hb-form-group">
-                        <label class="hb-form-label">الأولوية *</label>
+                        <label class="hb-form-label">الأولوية <span class="required-star">*</span></label>
                         <InputSelect @bind-Value="_model.Priority" class="hb-form-control">
-                            @foreach (var priority in Enum.GetValues<TransactionPriority>())
+                            @foreach (var p in Enum.GetValues<TransactionPriority>())
                             {
-                                <option value="@priority">@GetPriorityLabel(priority)</option>
+                                <option value="@p">@GetPriorityLabel(p)</option>
                             }
                         </InputSelect>
                     </div>
 
-                    <!-- فرع المرسل -->
                     <div class="hb-form-group">
-                        <label class="hb-form-label">الفرع المرسل *</label>
-                        <InputSelect @bind-Value="_model.SenderBranchId" class="hb-form-control">
+                        <label class="hb-form-label">الفرع المستلِم <span class="required-star">*</span></label>
+                        <InputSelect @bind-Value="_model.ReceiverBranchId" class="hb-form-control"
+                                     @bind-Value:after="OnReceiverBranchChanged">
                             <option value="">-- اختر الفرع --</option>
-                            @foreach (var branch in _branches)
+                            @foreach (var b in _branches)
                             {
-                                <option value="@branch.Id">@branch.NameAr</option>
+                                <option value="@b.Id">@b.NameAr</option>
                             }
                         </InputSelect>
                     </div>
 
-                    <!-- فرع المستلم -->
+                    @if (_isHqSelected)
+                    {
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الإدارة المستلِمة <span class="required-star">*</span></label>
+                            <InputSelect @bind-Value="_model.ReceiverDepartmentId" class="hb-form-control"
+                                         @bind-Value:after="OnReceiverDepartmentChanged">
+                                <option value="">-- اختر الإدارة --</option>
+                                @foreach (var d in _departments)
+                                {
+                                    <option value="@d.Id">@d.NameAr</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    }
+
                     <div class="hb-form-group">
-                        <label class="hb-form-label">الفرع المستلم *</label>
-                        <InputSelect @bind-Value="_model.ReceiverBranchId" class="hb-form-control">
-                            <option value="">-- اختر الفرع --</option>
-                            @foreach (var branch in _branches)
+                        <label class="hb-form-label">الشخص المستلِم <span class="required-star">*</span></label>
+                        <InputSelect @bind-Value="_model.ReceiverUserId" class="hb-form-control" disabled="@(_receiverUsers.Count == 0)">
+                            <option value="">@GetReceiverPlaceholder()</option>
+                            @foreach (var u in _receiverUsers)
                             {
-                                <option value="@branch.Id">@branch.NameAr</option>
+                                <option value="@u.Id">@u.FullNameAr @(string.IsNullOrEmpty(u.JobTitle) ? "" : $"— {u.JobTitle}")</option>
                             }
                         </InputSelect>
+                        <small class="hb-form-help">@GetReceiverHelp()</small>
                     </div>
 
-                    <!-- تاريخ الاستحقاق -->
                     <div class="hb-form-group">
-                        <label class="hb-form-label">تاريخ الاستحقاق</label>
-                        <InputDate @bind-Value="_model.DueDate" class="hb-form-control" />
+                        <label class="hb-form-label">
+                            <i class="bi bi-clock-history"></i> تاريخ الإرسال الفعلي <span class="required-star">*</span>
+                        </label>
+                        <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_model.SentAt" class="hb-form-control" />
+                        <small class="hb-form-help">أدخل وقت الإرسال الفعلي للمعاملة (وليس وقت إنشائها على النظام).</small>
+                    </div>
+
+                    <div class="hb-form-group">
+                        <label class="hb-form-label">تاريخ الاستحقاق (اختياري)</label>
+                        <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_model.DueDate" class="hb-form-control" />
+                    </div>
+
+                    <div class="hb-form-group full-width require-doc-toggle">
+                        <label class="toggle-label">
+                            <InputCheckbox @bind-Value="_model.RequireReceiverDocument" />
+                            <span class="toggle-text">
+                                <strong><i class="bi bi-file-earmark-check"></i> اشتراط رفع مستند إثبات استلام</strong>
+                                <small>عند التفعيل، لن يستطيع المستلم تأكيد الاستلام دون رفع مستند إثبات.</small>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="hb-form-group full-width">
+                        <label class="hb-form-label">
+                            <i class="bi bi-chat-left-text"></i> ملاحظة المرسل (اختياري)
+                        </label>
+                        <InputTextArea @bind-Value="_model.SenderNote" class="hb-form-control textarea" rows="2"
+                                       maxlength="1000"
+                                       placeholder="أي ملاحظة تود إرسالها للمستلم مع المعاملة..." />
+                        <small class="hb-form-help">ستظهر للمستلم في صفحة تفاصيل المعاملة.</small>
+                    </div>
+
+                    <div class="hb-form-group full-width">
+                        <label class="hb-form-label">
+                            <i class="bi bi-paperclip"></i> المرفقات (اختياري)
+                        </label>
+                        <div class="upload-dropzone @(_pendingFiles.Count > 0 ? "has-files" : "")">
+                            <InputFile OnChange="HandleFilesSelected" multiple
+                                       accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
+                                       class="upload-input" id="createTxUpload" />
+                            <label for="createTxUpload" class="upload-dropzone-inner">
+                                <div class="upload-icon"><i class="bi bi-cloud-arrow-up"></i></div>
+                                <div class="upload-title">اسحب وأفلت الملفات هنا أو انقر للاختيار</div>
+                                <div class="upload-hint">PDF / صور / Word / Excel — حتى 10 ملفات، 10MB لكل ملف</div>
+                            </label>
+                        </div>
+
+                        @if (_pendingFiles.Count > 0)
+                        {
+                            <div class="pending-files-card">
+                                <div class="pending-files-header">
+                                    <span><i class="bi bi-files"></i> الملفات المختارة (@_pendingFiles.Count)</span>
+                                    <button type="button" class="pending-clear-btn" @onclick="ClearPendingFiles">
+                                        <i class="bi bi-x-circle"></i> مسح الكل
+                                    </button>
+                                </div>
+                                <ul class="pending-files-list">
+                                    @for (var i = 0; i < _pendingFiles.Count; i++)
+                                    {
+                                        var idx = i;
+                                        var f = _pendingFiles[idx];
+                                        <li class="pending-file-item">
+                                            <div class="pf-icon"><i class="bi @GetFileIcon(f.Name)"></i></div>
+                                            <div class="pf-info">
+                                                <span class="pf-name">@f.Name</span>
+                                                <span class="pf-size">@FormatSize(f.Size)</span>
+                                            </div>
+                                            <button type="button" class="pf-remove" title="إزالة"
+                                                    @onclick="() => RemovePendingFile(idx)">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        }
                     </div>
                 </div>
 
-                <!-- Submit -->
                 <div class="form-actions">
                     <button type="submit" class="btn-hb-primary" disabled="@_submitting">
                         @if (_submitting)
                         {
                             <span class="hb-spinner" style="width:20px;height:20px;border-width:2px;"></span>
-                            <span>جاري الحفظ...</span>
+                            <span>جاري الإرسال...</span>
                         }
                         else
                         {
-                            <i class="bi bi-check-lg"></i>
-                            <span>إنشاء المعاملة</span>
+                            <i class="bi bi-send-fill"></i>
+                            <span>إنشاء وإرسال المعاملة</span>
                         }
                     </button>
                     <a href="/transactions" class="btn-hb-outline">
@@ -140,11 +234,82 @@
 </div>
 
 @code {
-    private CreateTransactionModel _model = new();
+    private readonly CreateTransactionModel _model = new();
     private List<Branch> _branches = [];
+    private List<Department> _departments = [];
+    private List<ApplicationUser> _receiverUsers = [];
+    private string? _currentBranchName;
+    private string? _currentDepartmentName;
     private bool _submitting;
-    private string? _successMessage;
     private string? _errorMessage;
+    private Guid? _hqBranchId;
+    private bool _isHqSelected;
+    private readonly List<PendingFile> _pendingFiles = new();
+    private const int MaxFiles = 10;
+    private const long MaxFileBytes = 10L * 1024 * 1024;
+
+    private async Task HandleFilesSelected(InputFileChangeEventArgs e)
+    {
+        _errorMessage = null;
+        foreach (var file in e.GetMultipleFiles(MaxFiles))
+        {
+            if (_pendingFiles.Count >= MaxFiles)
+            {
+                _errorMessage = $"الحد الأقصى {MaxFiles} ملفات";
+                break;
+            }
+            if (file.Size > MaxFileBytes)
+            {
+                _errorMessage = $"الملف '{file.Name}' أكبر من 10MB";
+                continue;
+            }
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(MaxFileBytes).CopyToAsync(ms);
+            _pendingFiles.Add(new PendingFile
+            {
+                Name = file.Name,
+                ContentType = string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType,
+                Size = file.Size,
+                Data = ms.ToArray()
+            });
+        }
+    }
+
+    private void RemovePendingFile(int index)
+    {
+        if (index >= 0 && index < _pendingFiles.Count)
+            _pendingFiles.RemoveAt(index);
+    }
+
+    private void ClearPendingFiles() => _pendingFiles.Clear();
+
+    private static string GetFileIcon(string name)
+    {
+        var ext = Path.GetExtension(name).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => "bi-file-earmark-pdf",
+            ".doc" or ".docx" => "bi-file-earmark-word",
+            ".xls" or ".xlsx" => "bi-file-earmark-excel",
+            ".png" or ".jpg" or ".jpeg" or ".gif" => "bi-file-earmark-image",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024):F1} MB";
+    }
+
+    private class PendingFile
+    {
+        public string Name { get; set; } = "";
+        public string ContentType { get; set; } = "";
+        public long Size { get; set; }
+        public byte[] Data { get; set; } = Array.Empty<byte>();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -152,18 +317,90 @@
             .Where(b => b.IsActive)
             .OrderBy(b => b.NameAr)
             .ToListAsync();
+
+        _hqBranchId = _branches.FirstOrDefault(b => b.BranchType == BranchType.HeadOffice)?.Id;
+
+        _departments = await DbContext.Departments
+            .Where(d => d.IsActive)
+            .OrderBy(d => d.NameAr)
+            .ToListAsync();
+
+        if (CurrentUser.BranchId.HasValue)
+        {
+            _currentBranchName = _branches.FirstOrDefault(b => b.Id == CurrentUser.BranchId.Value)?.NameAr;
+        }
+        if (CurrentUser.DepartmentId.HasValue)
+        {
+            _currentDepartmentName = _departments.FirstOrDefault(d => d.Id == CurrentUser.DepartmentId.Value)?.NameAr;
+        }
     }
 
-    private async Task GoBack()
+    private async Task OnReceiverBranchChanged()
     {
-        await JS.InvokeVoidAsync("history.back");
+        _model.ReceiverUserId = null;
+        _model.ReceiverDepartmentId = null;
+        _receiverUsers = [];
+        _isHqSelected = false;
+
+        if (string.IsNullOrEmpty(_model.ReceiverBranchId)) return;
+        if (!Guid.TryParse(_model.ReceiverBranchId, out var branchId)) return;
+
+        // إذا اختار الإدارة العامة → ننتظر اختيار الإدارة لتحميل المستخدمين
+        if (_hqBranchId.HasValue && branchId == _hqBranchId.Value)
+        {
+            _isHqSelected = true;
+            return;
+        }
+
+        // فرع عادي → موظفو هذا الفرع فقط
+        _receiverUsers = await UserManager.Users
+            .Where(u => u.IsActive
+                        && u.BranchId == branchId
+                        && u.Id != CurrentUser.UserId)
+            .OrderBy(u => u.FullNameAr)
+            .ToListAsync();
     }
+
+    private async Task OnReceiverDepartmentChanged()
+    {
+        _model.ReceiverUserId = null;
+        _receiverUsers = [];
+
+        if (string.IsNullOrEmpty(_model.ReceiverDepartmentId)) return;
+        if (!Guid.TryParse(_model.ReceiverDepartmentId, out var deptId)) return;
+        if (!_hqBranchId.HasValue) return;
+
+        // موظفو HQ في الإدارة المختارة
+        _receiverUsers = await UserManager.Users
+            .Where(u => u.IsActive
+                        && u.BranchId == _hqBranchId.Value
+                        && u.DepartmentId == deptId
+                        && u.Id != CurrentUser.UserId)
+            .OrderBy(u => u.FullNameAr)
+            .ToListAsync();
+    }
+
+    private string GetReceiverPlaceholder()
+    {
+        if (string.IsNullOrEmpty(_model.ReceiverBranchId)) return "-- اختر الفرع أولاً --";
+        if (_isHqSelected && string.IsNullOrEmpty(_model.ReceiverDepartmentId)) return "-- اختر الإدارة أولاً --";
+        if (_receiverUsers.Count == 0) return "-- لا يوجد موظفون --";
+        return "-- اختر المستلِم --";
+    }
+
+    private string GetReceiverHelp()
+    {
+        if (_isHqSelected) return "موظفو الإدارة المختارة في الإدارة العامة";
+        if (!string.IsNullOrEmpty(_model.ReceiverBranchId)) return "موظفو الفرع المختار";
+        return "اختر الفرع المستلِم لعرض الموظفين";
+    }
+
+    private async Task GoBack() => await JS.InvokeVoidAsync("history.back");
 
     private async Task HandleSubmit()
     {
         _submitting = true;
         _errorMessage = null;
-        _successMessage = null;
 
         try
         {
@@ -173,7 +410,47 @@
                 return;
             }
 
-            // Generate sequential reference: HB-YYYYMM-XXXXX
+            if (string.IsNullOrEmpty(_model.ReceiverBranchId))
+            {
+                _errorMessage = "يرجى اختيار الفرع المستلِم";
+                return;
+            }
+
+            if (_isHqSelected && string.IsNullOrEmpty(_model.ReceiverDepartmentId))
+            {
+                _errorMessage = "يرجى اختيار الإدارة المستلِمة";
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_model.ReceiverUserId))
+            {
+                _errorMessage = "يرجى اختيار الشخص المستلِم";
+                return;
+            }
+
+            if (_model.DueDate.HasValue && _model.DueDate.Value < DateTime.Now)
+            {
+                _errorMessage = "تاريخ الاستحقاق لا يمكن أن يكون في الماضي";
+                return;
+            }
+
+            // وقت الإرسال الفعلي — يدخله المستخدم. نتحقق من المعقولية.
+            var sentAtLocal = DateTime.SpecifyKind(_model.SentAt, DateTimeKind.Local);
+            var sentAtUtc = sentAtLocal.ToUniversalTime();
+            if (sentAtUtc > DateTime.UtcNow.AddMinutes(5))
+            {
+                _errorMessage = "تاريخ الإرسال الفعلي لا يمكن أن يكون في المستقبل";
+                return;
+            }
+
+            var receiverUserId = Guid.Parse(_model.ReceiverUserId!);
+            var receiverUser = _receiverUsers.FirstOrDefault(u => u.Id == receiverUserId);
+            if (receiverUser is null)
+            {
+                _errorMessage = "الشخص المستلِم المختار غير صالح";
+                return;
+            }
+
             var now = DateTime.UtcNow;
             var prefix = $"HB-{now:yyyyMM}-";
             var lastRef = await DbContext.Transactions
@@ -186,28 +463,99 @@
                 seq = lastSeq + 1;
             var refNumber = $"{prefix}{seq:D5}";
 
+            var nowUtc = DateTime.UtcNow;
             var transaction = new Transaction
             {
                 Id = Guid.NewGuid(),
                 ReferenceNumber = refNumber,
-                Subject = _model.Subject,
-                Description = _model.Description,
+                Subject = _model.Subject.Trim(),
+                Description = string.IsNullOrWhiteSpace(_model.Description) ? null : _model.Description.Trim(),
                 Type = _model.Type,
                 Priority = _model.Priority,
-                Status = TransactionStatus.Draft,
-                SenderBranchId = string.IsNullOrEmpty(_model.SenderBranchId) ? null : Guid.Parse(_model.SenderBranchId),
-                ReceiverBranchId = string.IsNullOrEmpty(_model.ReceiverBranchId) ? null : Guid.Parse(_model.ReceiverBranchId),
-                DueDate = _model.DueDate,
+                Status = TransactionStatus.Sent,
                 SenderUserId = CurrentUser.UserId,
-                ReceiverUserId = Guid.Empty,
+                SenderBranchId = CurrentUser.BranchId,
+                SenderDepartmentId = CurrentUser.DepartmentId,
+                ReceiverBranchId = Guid.Parse(_model.ReceiverBranchId!),
+                ReceiverDepartmentId = receiverUser.DepartmentId,
+                ReceiverUserId = receiverUserId,
+                RequireReceiverDocument = _model.RequireReceiverDocument,
+                SenderNote = string.IsNullOrWhiteSpace(_model.SenderNote) ? null : _model.SenderNote.Trim(),
+                DueDate = _model.DueDate,
+                SentAt = sentAtUtc,
+                CreatedAt = nowUtc,
                 CreatedByUserId = CurrentUser.UserId
             };
+
+            transaction.History.Add(new TransactionHistory
+            {
+                TransactionId = transaction.Id,
+                FromStatus = TransactionStatus.Sent,
+                ToStatus = TransactionStatus.Sent,
+                Action = "تم إنشاء وإرسال المعاملة",
+                PerformedByUserId = CurrentUser.UserId,
+                PerformedAt = nowUtc
+            });
 
             DbContext.Transactions.Add(transaction);
             await DbContext.SaveChangesAsync();
 
-            Navigation.NavigateTo($"/transactions?success={Uri.EscapeDataString($"تم إنشاء المعاملة بنجاح - رقم المرجع: {refNumber}")}");
-            return;
+            // رفع المرفقات الاختيارية للمرسل
+            if (_pendingFiles.Count > 0)
+            {
+                var uploadedAny = false;
+                foreach (var pf in _pendingFiles)
+                {
+                    try
+                    {
+                        using var validateStream = new MemoryStream(pf.Data);
+                        var validation = FileValidation.Validate(validateStream, pf.Name, pf.ContentType, pf.Size);
+                        if (!validation.IsValid)
+                        {
+                            _errorMessage = $"الملف '{pf.Name}' غير صالح: {validation.ErrorMessage}";
+                            continue;
+                        }
+
+                        using var uploadStream = new MemoryStream(pf.Data);
+                        var uploadResult = await FileStorage.UploadAsync(uploadStream, pf.Name, pf.ContentType);
+
+                        var doc = new TransactionDocument
+                        {
+                            Id = Guid.NewGuid(),
+                            TransactionId = transaction.Id,
+                            OriginalFileName = pf.Name,
+                            StoragePath = uploadResult.StoragePath,
+                            FileSizeBytes = uploadResult.FileSizeBytes,
+                            Checksum = uploadResult.Checksum,
+                            ContentType = pf.ContentType,
+                            DocumentType = DocumentType.Attachment,
+                            Version = 1,
+                            UploadedByUserId = CurrentUser.UserId,
+                            UploadedAt = DateTime.UtcNow
+                        };
+                        DbContext.TransactionDocuments.Add(doc);
+                        uploadedAny = true;
+                    }
+                    catch
+                    {
+                        // فشل ملف واحد لا يمنع باقي الملفات
+                    }
+                }
+                if (uploadedAny)
+                    await DbContext.SaveChangesAsync();
+            }
+
+            try
+            {
+                var title = $"معاملة جديدة واردة — {transaction.ReferenceNumber}";
+                var message = $"معاملة جديدة من {_currentBranchName ?? "الإدارة"} بعنوان: {transaction.Subject}";
+                await NotificationService.NotifyUserAsync(receiverUserId, title, message, transaction.Id, NotificationType.TransactionCreated);
+            }
+            catch
+            {
+            }
+
+            Navigation.NavigateTo($"/transactions/{transaction.Id}?success={Uri.EscapeDataString($"تم إرسال المعاملة بنجاح — رقم المرجع: {refNumber}")}");
         }
         catch (Exception ex)
         {
@@ -221,14 +569,11 @@
 
     private static string GetTypeLabel(TransactionType t) => t switch
     {
-        TransactionType.OutgoingFromHQ => "صادر من الإدارة",
-        TransactionType.IncomingToHQ => "وارد للإدارة",
-        TransactionType.BranchToBranch => "بين الفروع",
-        TransactionType.InternalDepartment => "داخلي",
         TransactionType.DocumentDelivery => "تسليم مستندات",
         TransactionType.CashTransfer => "تحويل نقدي",
-        TransactionType.ReturnedItem => "مرتجع",
-        TransactionType.AuditRequest => "طلب تدقيق",
+        TransactionType.InternalDepartment => "داخلي بين الإدارات",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.Other => "أخرى",
         _ => t.ToString()
     };
 
@@ -237,7 +582,6 @@
         TransactionPriority.Normal => "عادية",
         TransactionPriority.Important => "مهمة",
         TransactionPriority.Urgent => "عاجلة",
-        TransactionPriority.Critical => "حرجة",
         _ => p.ToString()
     };
 
@@ -245,10 +589,14 @@
     {
         public string Subject { get; set; } = "";
         public string? Description { get; set; }
-        public TransactionType Type { get; set; }
-        public TransactionPriority Priority { get; set; }
-        public string? SenderBranchId { get; set; }
+        public TransactionType Type { get; set; } = TransactionType.DocumentDelivery;
+        public TransactionPriority Priority { get; set; } = TransactionPriority.Normal;
         public string? ReceiverBranchId { get; set; }
+        public string? ReceiverDepartmentId { get; set; }
+        public string? ReceiverUserId { get; set; }
         public DateTime? DueDate { get; set; }
+        public DateTime SentAt { get; set; } = DateTime.Now;
+        public bool RequireReceiverDocument { get; set; }
+        public string? SenderNote { get; set; }
     }
 }

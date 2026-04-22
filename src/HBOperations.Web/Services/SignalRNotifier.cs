@@ -17,7 +17,7 @@ public class SignalRNotifier(IHubContext<NotificationHub> hubContext, Notificati
                 Timestamp = DateTime.UtcNow
             });
 
-        await eventService.RaiseAsync(userId);
+        await eventService.RaiseAsync(new NotificationPayload(userId, title, message, transactionId));
     }
 
     public async Task SendToAllAsync(string title, string message, Guid? transactionId = null)
