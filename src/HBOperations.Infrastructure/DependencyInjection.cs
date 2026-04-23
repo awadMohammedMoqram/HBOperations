@@ -75,6 +75,7 @@ public static class DependencyInjection
             services.AddScoped<IFileStorageService, LocalFileStorageService>();
 
         services.AddSingleton<IFileValidationService, FileValidationService>();
+        services.AddScoped<IPdfCompressionService, PdfCompressionService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IEmailService, SmtpEmailService>();
         services.AddMemoryCache();

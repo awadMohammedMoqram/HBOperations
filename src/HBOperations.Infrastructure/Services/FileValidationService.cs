@@ -7,7 +7,7 @@ public class FileValidationService : IFileValidationService
     // PDF Magic Bytes: %PDF (0x25 0x50 0x44 0x46)
     private static readonly byte[] PdfMagicBytes = [0x25, 0x50, 0x44, 0x46];
 
-    private const long MaxFileSizeBytes = 50 * 1024 * 1024; // 50 MB
+    private const long MaxFileSizeBytes = 20L * 1024 * 1024; // 20 MB per file (matches total cap)
     private const int MaxFilesPerTransaction = 10;
 
     private static readonly HashSet<string> AllowedExtensions = [".pdf"];

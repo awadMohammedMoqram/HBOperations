@@ -947,6 +947,322 @@
     .workflow-btn { justify-content: center; }
 }
 
+/* ============================================================
+   MOBILE — Comprehensive transaction-detail refinements
+   ============================================================ */
+
+@media (max-width: 992px) {
+    /* Page header — stack title + actions vertically */
+    .page-title-section .title-with-action {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 0.75rem;
+    }
+    .title-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .title-actions > * { flex: 1 1 calc(50% - 0.25rem); justify-content: center; }
+    .section-title { font-size: 1.1rem !important; line-height: 1.4; }
+    .section-title .ref-number { word-break: break-all; font-size: 0.9em; }
+    .section-subtitle { font-size: 0.85rem; }
+}
+
+@media (max-width: 768px) {
+    /* === Simplified workflow flow (مُرسلة → مُستلَمة) === */
+    .simple-flow {
+        padding: 1.25rem 1rem 1rem !important;
+        gap: 0;
+    }
+    .workflow-step {
+        padding: 0 0.25rem;
+    }
+    .workflow-step .step-line {
+        top: 18px !important;
+    }
+
+    /* === Status bar === */
+    .status-bar {
+        padding: 0.75rem 0.85rem !important;
+        border-radius: 10px;
+    }
+    .status-badge-lg {
+        font-size: 0.85rem !important;
+        padding: 0.4rem 0.75rem !important;
+    }
+    .status-meta { font-size: 0.78rem; }
+    .status-meta > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+    /* === Action card (receiver) === */
+    .action-card { padding: 1rem !important; }
+    .action-receipt-stack { gap: 1rem !important; }
+    .action-receipt-time { max-width: 100% !important; }
+    .action-note-input textarea,
+    .note-textarea { min-height: 90px !important; }
+
+    /* === Workflow buttons row — stack on phone === */
+    .workflow-actions {
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+        width: 100%;
+    }
+    .workflow-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 0.7rem 0.85rem !important;
+        font-size: 0.9rem !important;
+    }
+
+    /* === Sender / Receiver boxes — compact horizontal cards === */
+    .sender-receiver {
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+        margin-bottom: 0.85rem !important;
+        position: relative;
+    }
+    .sr-box {
+        display: flex !important;
+        align-items: center !important;
+        text-align: start !important;
+        gap: 0.75rem !important;
+        padding: 0.75rem 0.85rem !important;
+        background: #fff !important;
+        border: 1px solid #e5e7eb !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+        position: relative;
+    }
+    .sr-sender   { border-right: 4px solid #003d7a !important; }
+    .sr-receiver { border-right: 4px solid #28a745 !important; }
+
+    .sr-box .sr-icon {
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 10px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 1.15rem !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
+    }
+    .sr-sender   .sr-icon { background: rgba(0, 61, 122, 0.1) !important; color: #003d7a !important; }
+    .sr-receiver .sr-icon { background: rgba(40, 167, 69, 0.1) !important; color: #28a745 !important; }
+
+    /* Wrap all non-icon children (h4, p.sr-branch, p.sr-dept, p.sr-user) into
+       a flex-column "body" using grid so we don't need markup changes. */
+    .sr-box {
+        display: grid !important;
+        grid-template-columns: 40px 1fr !important;
+        grid-template-rows: auto auto auto auto !important;
+        column-gap: 0.75rem !important;
+        row-gap: 0.1rem !important;
+        align-items: center;
+    }
+    .sr-box .sr-icon {
+        grid-row: 1 / span 10;
+        grid-column: 1;
+        align-self: center;
+    }
+    .sr-box h4,
+    .sr-box .sr-branch,
+    .sr-box .sr-dept,
+    .sr-box .sr-user {
+        grid-column: 2;
+    }
+    .sr-box h4 {
+        font-size: 0.7rem !important;
+        color: #6c757d !important;
+        margin: 0 !important;
+        letter-spacing: 0.3px;
+        font-weight: 600;
+    }
+    .sr-box .sr-branch {
+        font-size: 0.9rem !important;
+        font-weight: 700;
+        color: #003d7a !important;
+        margin: 0 !important;
+        word-break: break-word;
+    }
+    .sr-box .sr-dept,
+    .sr-box .sr-user {
+        font-size: 0.75rem !important;
+        color: #6c757d !important;
+        margin: 0 !important;
+        word-break: break-word;
+    }
+    .sr-box .sr-user i { margin-left: 0.25rem; color: #28a745; }
+
+    /* Connector arrow between the two cards — vertical & subtle */
+    .sr-arrow {
+        align-self: center;
+        transform: rotate(90deg) !important;
+        font-size: 1rem !important;
+        color: #d4af37 !important;
+        margin: -2px 0 !important;
+        opacity: 0.9;
+    }
+
+    /* === Dates row — compact inline cards === */
+    .dates-row {
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+        padding-top: 0.75rem !important;
+        border-top: 1px dashed #e5e7eb !important;
+    }
+    .date-item {
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+    }
+    .date-item .info-label {
+        font-size: 0.75rem !important;
+        color: #6c757d !important;
+    }
+    .date-item span:last-child {
+        font-size: 0.82rem !important;
+        direction: ltr;
+    }
+
+    /* === Notes grid === */
+    .party-notes-grid {
+        grid-template-columns: 1fr !important;
+        gap: 0.75rem !important;
+    }
+    .party-note { padding: 0.75rem !important; }
+    .party-note-body { font-size: 0.88rem !important; }
+
+    /* === Document items — stack vertically === */
+    .doc-item {
+        flex-wrap: wrap;
+        gap: 0.6rem !important;
+        padding: 0.7rem 0.75rem !important;
+    }
+    .doc-icon { width: 36px !important; height: 36px !important; font-size: 1rem !important; }
+    .doc-info { flex: 1 1 calc(100% - 50px); min-width: 0; }
+    .doc-name { font-size: 0.85rem !important; word-break: break-word; }
+    .doc-name-row { gap: 0.4rem; }
+    .doc-meta { font-size: 0.72rem !important; }
+    .doc-uploader-badge { font-size: 0.66rem !important; padding: 0.15rem 0.45rem !important; }
+    .doc-date {
+        order: 2;
+        flex: 1;
+        font-size: 0.72rem !important;
+    }
+    .doc-actions {
+        order: 3;
+        flex: 0 0 auto;
+        margin-inline-start: auto;
+    }
+
+    /* === Sender cancel card === */
+    .sender-cancel-card { padding: 0.85rem !important; }
+    .scc-content {
+        flex-direction: column;
+        align-items: stretch !important;
+        text-align: center;
+        gap: 0.75rem !important;
+    }
+    .scc-icon { margin: 0 auto; }
+    .scc-text { min-width: 0 !important; }
+    .scc-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* === Admin edit banner === */
+    .admin-edit-banner {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem !important;
+        padding: 0.85rem !important;
+    }
+    .aeb-meta {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem !important;
+    }
+
+    /* === Modal — full screen on phones === */
+    .modal-content.modal-md {
+        width: calc(100vw - 1rem) !important;
+        max-width: calc(100vw - 1rem) !important;
+        max-height: calc(100vh - 1rem) !important;
+        margin: 0 !important;
+    }
+    .modal-content .modal-header h3 { font-size: 1rem !important; }
+    .modal-body { padding: 0.85rem !important; }
+    .modal-footer {
+        flex-direction: column-reverse !important;
+        gap: 0.5rem !important;
+    }
+    .modal-footer > * { width: 100% !important; justify-content: center; }
+
+    /* === PDF preview modal full screen === */
+    .pdf-modal {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+    }
+    .pdf-header { padding: 0.6rem 0.75rem !important; flex-wrap: wrap; gap: 0.5rem !important; }
+    .pdf-header-info h3 { font-size: 0.9rem !important; }
+    .pdf-icon-lg { font-size: 1.4rem !important; }
+    .pdf-meta-text { font-size: 0.7rem !important; }
+    .pdf-toolbar { gap: 0.3rem !important; }
+    .pdf-tool-btn,
+    .modal-close { width: 36px; height: 36px; }
+    .pdf-frame { height: calc(100vh - 70px) !important; }
+
+    /* === Upload dropzone === */
+    .upload-dropzone-inner { padding: 1.25rem 0.75rem !important; }
+    .upload-icon i { font-size: 1.75rem !important; }
+    .upload-title { font-size: 0.9rem !important; }
+    .upload-hint { font-size: 0.75rem !important; }
+
+    /* === Pending files list === */
+    .pending-files-card { padding: 0.6rem !important; }
+    .pending-file-item { padding: 0.5rem !important; gap: 0.5rem !important; }
+    .pf-name { font-size: 0.82rem !important; word-break: break-word; }
+    .pf-size { font-size: 0.7rem !important; }
+}
+
+@media (max-width: 480px) {
+    /* === Hero/title even tighter === */
+    .section-title { font-size: 1rem !important; }
+    .section-title i { font-size: 1.05rem; }
+    .ref-number { font-size: 0.8rem !important; }
+
+    /* Title actions = 1 column */
+    .title-actions > * { flex: 1 1 100% !important; }
+
+    /* Workflow steps very compact */
+    .simple-flow { padding: 1rem 0.5rem 0.75rem !important; }
+    .step-dot { width: 36px !important; height: 36px !important; font-size: 0.85rem !important; }
+    .step-label { font-size: 0.72rem !important; }
+    .step-date { font-size: 0.65rem !important; padding: 0.1rem 0.35rem !important; }
+    .step-line { top: 15px !important; height: 2px !important; }
+
+    /* Status bar even tighter */
+    .status-meta { font-size: 0.72rem !important; gap: 0.5rem !important; }
+    .delivery-badge { font-size: 0.7rem !important; padding: 0.2rem 0.5rem !important; }
+
+    /* Sender/receiver smaller */
+    .sr-icon { width: 36px !important; height: 36px !important; font-size: 1rem !important; }
+    .sr-box h4 { font-size: 0.88rem !important; }
+    .sr-branch { font-size: 0.85rem !important; }
+    .sr-dept, .sr-user { font-size: 0.78rem !important; }
+
+    /* Documents */
+    .doc-actions { gap: 0.3rem; }
+    .doc-action-btn { width: 32px; height: 32px; }
+}
+
+
 /* === New simplified workflow styles === */
 .simple-flow {
     display: flex;

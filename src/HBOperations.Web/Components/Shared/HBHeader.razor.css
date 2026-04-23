@@ -47,6 +47,21 @@
     gap: 1rem;
 }
 
+/* Whole brand (logo + name) is a single clickable link */
+.brand-link {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    border-radius: 10px;
+    padding: 2px;
+    transition: opacity 0.2s ease;
+}
+.brand-link:hover { opacity: 0.92; text-decoration: none; color: inherit; }
+.brand-link:focus-visible { outline: 2px solid #d4af37; outline-offset: 2px; }
+
 .logo {
     width: 60px;
     height: 60px;
@@ -59,12 +74,10 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     transition: all 0.3s ease;
     flex-shrink: 0;
-    text-decoration: none;
-    cursor: pointer;
 }
 
-.logo:hover {
-    transform: scale(1.08);
+.brand-link:hover .logo {
+    transform: scale(1.06);
     box-shadow: 0 6px 16px rgba(212, 175, 55, 0.4);
 }
 
@@ -80,7 +93,7 @@
     gap: 0.1rem;
 }
 
-.bank-name h1 {
+.bank-name-ar {
     font-size: 1.2rem;
     margin: 0;
     font-weight: 700;
@@ -266,6 +279,19 @@
     transform: rotate(-45deg) translate(7px, -7px);
 }
 
+/* Mobile Toolbar (bell + hamburger, shown only on mobile) */
+.mobile-toolbar {
+    display: none;       /* hidden on desktop */
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+/* Mobile notification bell */
+.notif-btn-mobile {
+    display: none;       /* hidden on desktop */
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
     .header-content {
@@ -293,9 +319,66 @@
     .logo-section {
         width: 100%;
         justify-content: space-between;
+        gap: 0.5rem;
     }
+    .brand-link { gap: 0.5rem; flex: 1; min-width: 0; }
+    .logo { width: 44px; height: 44px; padding: 5px; border-radius: 7px; }
+    .bank-name-ar { font-size: 1rem; }
+    .bank-name-en { font-size: 0.65rem; }
+
+    /* Show mobile toolbar (bell + hamburger) */
+    .mobile-toolbar {
+        display: flex;
+    }
+
+    /* Mobile notification bell — visible */
+    .notif-btn-mobile {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.2rem;
+        text-decoration: none;
+        position: relative;
+        width: 44px;
+        height: 44px;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.1);
+        transition: all 0.2s;
+    }
+    .notif-btn-mobile:hover,
+    .notif-btn-mobile.active {
+        background: rgba(255,255,255,0.2);
+        color: #d4af37;
+    }
+    .notif-btn-mobile .notif-badge {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        background: #dc3545;
+        color: white;
+        font-size: 0.6rem;
+        font-weight: 700;
+        min-width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 3px;
+        line-height: 1;
+        border: 2px solid #003d7a;
+        animation: badgePulse 2s ease-in-out infinite;
+    }
+
+    /* Hide the notification button inside nav-links user-section on mobile */
+    .user-section .notif-btn {
+        display: none !important;
+    }
+
     .menu-toggle {
         display: flex;
+        flex-shrink: 0;
     }
     .nav-links {
         display: none;

@@ -104,9 +104,11 @@
 
 .contact-section .no-bullets li {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 0.75rem;
     margin-bottom: 1rem;
+    line-height: 1.5;
+    font-size: 1rem;
 }
 
 .contact-section .no-bullets li:last-child {
@@ -115,9 +117,18 @@
 
 .contact-section .no-bullets li i {
     color: #d4af37;
-    font-size: 1.1rem;
+    font-size: 1rem;
+    line-height: 1.5;
     width: 1.25rem;
     flex-shrink: 0;
+    text-align: center;
+    display: inline-block;
+    vertical-align: baseline;
+}
+
+.contact-section .no-bullets li i::before {
+    vertical-align: baseline;
+    line-height: inherit;
 }
 
 .contact-section .no-bullets a,
@@ -147,8 +158,58 @@
         grid-template-columns: 1fr;
         gap: 2rem;
     }
+
+    /* Center all footer sections on mobile */
+    .footer-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
     .footer-section.contact-section {
         margin-right: 0 !important;
-        justify-self: start !important;
+        justify-self: center !important;
+        text-align: center !important;
+    }
+
+    .social-links {
+        justify-content: center;
+    }
+
+    .contact-section .no-bullets {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: max-content;
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 0;
+    }
+
+    .contact-section .no-bullets li {
+        display: flex;
+        align-items: baseline;
+        justify-content: flex-start;
+        gap: 0.75rem;
+        width: 100%;
+        line-height: 1.5;
+        font-size: 1rem;
+    }
+
+    /* Center the phone row (shorter content) — match h4 "تواصل معنا" centering */
+    .contact-section .no-bullets li:nth-child(2) {
+        justify-content: center;
+        width: auto;
+        align-self: center;
+    }
+
+    .contact-section .no-bullets li i {
+        font-size: 1rem;
+        line-height: 1.5;
+        width: 1.25rem;
+        text-align: center;
+        flex-shrink: 0;
+        vertical-align: baseline;
     }
 }

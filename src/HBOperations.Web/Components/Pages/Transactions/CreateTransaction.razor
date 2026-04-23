@@ -15,15 +15,14 @@
 @inject INotificationService NotificationService
 @inject IFileStorageService FileStorage
 @inject IFileValidationService FileValidation
+@inject IPdfCompressionService PdfCompression
 @inject HBOperations.Web.Services.ToastService Toast
+@inject ILogger<CreateTransaction> Logger
 
 <PageTitle>معاملة جديدة - بنك حضرموت</PageTitle>
 
 <div class="page-container hb-fade-in">
     <div class="page-title-section centered-header">
-        <button type="button" class="btn-hb-outline btn-back back-floating" @onclick="GoBack">
-            <i class="bi bi-arrow-right"></i> العودة
-        </button>
         <div class="centered-title-block">
             <h1 class="section-title"><i class="bi bi-plus-circle"></i> إنشاء معاملة جديدة</h1>
             <p class="section-subtitle">يتم إرسال المعاملة للمستلم مباشرةً بمجرد الإنشاء</p>
@@ -163,13 +162,13 @@
                             <i class="bi bi-paperclip"></i> المرفقات (اختياري)
                         </label>
                         <div class="upload-dropzone @(_pendingFiles.Count > 0 ? "has-files" : "")">
-                            <InputFile OnChange="HandleFilesSelected" multiple
-                                       accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
+                            <InputFile OnChange="HandleFilesSelected"
+                                       accept=".pdf"
                                        class="upload-input" id="createTxUpload" />
                             <label for="createTxUpload" class="upload-dropzone-inner">
                                 <div class="upload-icon"><i class="bi bi-cloud-arrow-up"></i></div>
-                                <div class="upload-title">اسحب وأفلت الملفات هنا أو انقر للاختيار</div>
-                                <div class="upload-hint">PDF / صور / Word / Excel — حتى 10 ملفات، 10MB لكل ملف</div>
+                                <div class="upload-title">انقر لاختيار ملف PDF</div>
+                                <div class="upload-hint">PDF فقط — ملف واحد، حجم الملف حتى 5 ميجا</div>
                             </label>
                         </div>
 
@@ -205,22 +204,22 @@
                     </div>
                 </div>
 
-                <div class="form-actions">
-                    <button type="submit" class="btn-hb-primary" disabled="@_submitting">
+                <div class="form-actions form-actions-inline">
+                    <a href="/transactions" class="btn-hb-outline btn-sm">
+                        <i class="bi bi-x-lg"></i> إلغاء
+                    </a>
+                    <button type="submit" class="btn-hb-primary btn-sm" disabled="@_submitting">
                         @if (_submitting)
                         {
-                            <span class="hb-spinner" style="width:20px;height:20px;border-width:2px;"></span>
+                            <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span>
                             <span>جاري الإرسال...</span>
                         }
                         else
                         {
                             <i class="bi bi-send-fill"></i>
-                            <span>إنشاء وإرسال المعاملة</span>
+                            <span>إرسال المعاملة</span>
                         }
                     </button>
-                    <a href="/transactions" class="btn-hb-outline">
-                        <i class="bi bi-x-lg"></i> إلغاء
-                    </a>
                 </div>
             </EditForm>
         </div>
@@ -238,32 +237,62 @@
     private Guid? _hqBranchId;
     private bool _isHqSelected;
     private readonly List<PendingFile> _pendingFiles = new();
-    private const int MaxFiles = 10;
-    private const long MaxFileBytes = 10L * 1024 * 1024;
+    private const int MaxFiles = 1;
+    private const long MaxOriginalBytes = 20L * 1024 * 1024;     // hard ceiling on the upload size we accept into memory
+    private const long MaxCompressedBytes = 5L * 1024 * 1024;    // post-compression cap enforced server-side too
+
+    private long PendingTotalBytes => _pendingFiles.Sum(f => f.Size);
 
     private async Task HandleFilesSelected(InputFileChangeEventArgs e)
     {
-        foreach (var file in e.GetMultipleFiles(MaxFiles))
+        try
         {
-            if (_pendingFiles.Count >= MaxFiles)
+            Logger.LogInformation("HandleFilesSelected fired with {Count} file(s)", e.FileCount);
+            foreach (var file in e.GetMultipleFiles(MaxFiles))
             {
-                await Toast.ShowWarningAsync($"الحد الأقصى {MaxFiles} ملفات");
-                break;
+                Logger.LogInformation("Processing file Name={Name} Size={Size} ContentType={CT}",
+                    file.Name, file.Size, file.ContentType);
+                if (_pendingFiles.Count >= MaxFiles)
+                {
+                    await SafeToast("الحد الأقصى", "يُسمح برفع ملف واحد فقط لكل مستخدم.", "warning");
+                    break;
+                }
+                var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+                if (ext != ".pdf")
+                {
+                    await SafeToast("نوع غير مسموح", $"الملف '{file.Name}' غير مدعوم — يُقبل PDF فقط", "warning");
+                    continue;
+                }
+                if (file.Size > MaxOriginalBytes)
+                {
+                    await SafeToast("تجاوز الحجم", $"حجم '{file.Name}' أكبر من 20 ميجا. يجب تصغيره قبل الرفع.", "warning");
+                    continue;
+                }
+                try
+                {
+                    using var ms = new MemoryStream();
+                    await file.OpenReadStream(MaxOriginalBytes).CopyToAsync(ms);
+                    Logger.LogInformation("File buffered into memory: {Bytes} bytes", ms.Length);
+                    _pendingFiles.Add(new PendingFile
+                    {
+                        Name = file.Name,
+                        ContentType = string.IsNullOrEmpty(file.ContentType) ? "application/pdf" : file.ContentType,
+                        Size = file.Size,
+                        Data = ms.ToArray()
+                    });
+                }
+                catch (Exception innerEx)
+                {
+                    Logger.LogError(innerEx, "OpenReadStream failed for {Name}", file.Name);
+                    await SafeToast("تعذّر قراءة الملف",
+                        $"لم يتمكّن التطبيق من قراءة '{file.Name}': {innerEx.Message}");
+                }
             }
-            if (file.Size > MaxFileBytes)
-            {
-                await Toast.ShowWarningAsync("ملف كبير", $"الملف '{file.Name}' أكبر من 10MB");
-                continue;
-            }
-            using var ms = new MemoryStream();
-            await file.OpenReadStream(MaxFileBytes).CopyToAsync(ms);
-            _pendingFiles.Add(new PendingFile
-            {
-                Name = file.Name,
-                ContentType = string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType,
-                Size = file.Size,
-                Data = ms.ToArray()
-            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "HandleFilesSelected outer failure");
+            await SafeToast("فشل الرفع", $"تعذّر استلام الملف: {ex.Message}");
         }
     }
 
@@ -389,6 +418,24 @@
 
     private async Task GoBack() => await JS.InvokeVoidAsync("history.back");
 
+    private async Task SafeToast(string title, string message, string level = "error")
+    {
+        // على الموبايل قد تكون دائرة SignalR معلّقة أثناء عملية رفع كبيرة، لذلك نحمي كل استدعاء Toast بـ try/catch.
+        try
+        {
+            switch (level)
+            {
+                case "warning": await Toast.ShowWarningAsync(title, message); break;
+                case "info":    await Toast.ShowInfoAsync(title, message); break;
+                default:        await Toast.ShowErrorAsync(title, message); break;
+            }
+        }
+        catch (Exception toastEx)
+        {
+            Logger.LogWarning(toastEx, "Toast failed: {Title} - {Message}", title, message);
+        }
+    }
+
     private async Task HandleSubmit()
     {
         _submitting = true;
@@ -478,7 +525,7 @@
                 TransactionId = transaction.Id,
                 FromStatus = TransactionStatus.Sent,
                 ToStatus = TransactionStatus.Sent,
-                Action = "تم إنشاء وإرسال المعاملة",
+                Action = "تم إرسال المعاملة",
                 PerformedByUserId = CurrentUser.UserId,
                 PerformedAt = nowUtc
             });
@@ -486,49 +533,75 @@
             DbContext.Transactions.Add(transaction);
             await DbContext.SaveChangesAsync();
 
-            // رفع المرفقات الاختيارية للمرسل
+            // رفع المرفق الاختياري للمرسل (ملف واحد كحد أقصى)
             if (_pendingFiles.Count > 0)
             {
-                var uploadedAny = false;
-                foreach (var pf in _pendingFiles)
+                var pf = _pendingFiles[0];
+                Logger.LogInformation("Upload start TxId={TxId} File={Name} Size={Size}",
+                    transaction.Id, pf.Name, pf.Size);
+                try
                 {
-                    try
+                    using var validateStream = new MemoryStream(pf.Data);
+                    var validation = FileValidation.Validate(validateStream, pf.Name, pf.ContentType, pf.Size);
+                    if (!validation.IsValid)
                     {
-                        using var validateStream = new MemoryStream(pf.Data);
-                        var validation = FileValidation.Validate(validateStream, pf.Name, pf.ContentType, pf.Size);
-                        if (!validation.IsValid)
-                        {
-                            await Toast.ShowWarningAsync("ملف غير صالح", $"'{pf.Name}': {validation.ErrorMessage}");
-                            continue;
-                        }
-
-                        using var uploadStream = new MemoryStream(pf.Data);
-                        var uploadResult = await FileStorage.UploadAsync(uploadStream, pf.Name, pf.ContentType);
-
-                        var doc = new TransactionDocument
-                        {
-                            Id = Guid.NewGuid(),
-                            TransactionId = transaction.Id,
-                            OriginalFileName = pf.Name,
-                            StoragePath = uploadResult.StoragePath,
-                            FileSizeBytes = uploadResult.FileSizeBytes,
-                            Checksum = uploadResult.Checksum,
-                            ContentType = pf.ContentType,
-                            DocumentType = DocumentType.Attachment,
-                            Version = 1,
-                            UploadedByUserId = CurrentUser.UserId,
-                            UploadedAt = DateTime.UtcNow
-                        };
-                        DbContext.TransactionDocuments.Add(doc);
-                        uploadedAny = true;
+                        Logger.LogWarning("File validation failed: {Reason}", validation.ErrorMessage);
+                        await SafeToast("ملف غير صالح", $"'{pf.Name}': {validation.ErrorMessage}", "warning");
                     }
-                    catch
+                    else
                     {
-                        // فشل ملف واحد لا يمنع باقي الملفات
+                        Logger.LogInformation("Compressing PDF {Name} ({Bytes} bytes)", pf.Name, pf.Size);
+                        using var compressInput = new MemoryStream(pf.Data);
+                        var compression = await PdfCompression.CompressAsync(compressInput);
+                        Logger.LogInformation("Compression done: {Original} -> {Compressed} ({Ratio:P0})",
+                            compression.OriginalSizeBytes, compression.CompressedSizeBytes,
+                            compression.OriginalSizeBytes > 0
+                                ? 1.0 - (double)compression.CompressedSizeBytes / compression.OriginalSizeBytes
+                                : 0);
+
+                        if (compression.CompressedSizeBytes > MaxCompressedBytes)
+                        {
+                            compression.OutputStream.Dispose();
+                            var sizeMb = compression.CompressedSizeBytes / (1024.0 * 1024.0);
+                            Logger.LogWarning("Compressed file exceeds cap: {SizeMb:F2} MB", sizeMb);
+                            await SafeToast(
+                                "تجاوز حد الحجم",
+                                $"حجم الملف بعد الضغط ({sizeMb:F2} ميجا) يتجاوز الحد المسموح (5 ميجا).");
+                        }
+                        else
+                        {
+                            await using var uploadStream = compression.OutputStream;
+                            uploadStream.Position = 0;
+                            var uploadResult = await FileStorage.UploadAsync(uploadStream, pf.Name, pf.ContentType);
+                            Logger.LogInformation("File stored at {Path} ({Bytes} bytes)",
+                                uploadResult.StoragePath, uploadResult.FileSizeBytes);
+
+                            var doc = new TransactionDocument
+                            {
+                                Id = Guid.NewGuid(),
+                                TransactionId = transaction.Id,
+                                OriginalFileName = pf.Name,
+                                StoragePath = uploadResult.StoragePath,
+                                FileSizeBytes = uploadResult.FileSizeBytes,
+                                Checksum = uploadResult.Checksum,
+                                ContentType = pf.ContentType,
+                                DocumentType = DocumentType.Attachment,
+                                Version = 1,
+                                UploadedByUserId = CurrentUser.UserId,
+                                UploadedAt = DateTime.UtcNow
+                            };
+                            DbContext.TransactionDocuments.Add(doc);
+                            await DbContext.SaveChangesAsync();
+                            Logger.LogInformation("Document {DocId} saved to DB", doc.Id);
+                        }
                     }
                 }
-                if (uploadedAny)
-                    await DbContext.SaveChangesAsync();
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Upload failed for TxId={TxId} File={Name}", transaction.Id, pf.Name);
+                    await SafeToast("فشل رفع المرفق", ex.Message);
+                    // لا نقطع العملية — المعاملة تم إنشاؤها بنجاح، فقط المرفق فشل.
+                }
             }
 
             try
@@ -545,7 +618,8 @@
         }
         catch (Exception ex)
         {
-            await Toast.ShowErrorAsync("حدث خطأ", ex.Message);
+            Logger.LogError(ex, "HandleSubmit failed");
+            await SafeToast("حدث خطأ", ex.Message);
         }
         finally
         {

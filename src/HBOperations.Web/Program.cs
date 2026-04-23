@@ -33,9 +33,23 @@ try
     builder.Services.AddInfrastructure(builder.Configuration);
 
     builder.Services.AddRazorComponents()
-        .AddInteractiveServerComponents();
+        .AddInteractiveServerComponents(options =>
+        {
+            // Allow larger circuit messages so InputFile can stream PDFs (default is tiny ~32KB).
+            options.DisconnectedCircuitMaxRetained = 100;
+        })
+        .AddHubOptions(options =>
+        {
+            // Up to 25 MB per SignalR message — covers PDF uploads (we cap original at 20 MB).
+            options.MaximumReceiveMessageSize = 25 * 1024 * 1024;
+            options.EnableDetailedErrors = true;
+        });
 
-    builder.Services.AddSignalR();
+    builder.Services.AddSignalR(options =>
+    {
+        // Notification hub — keep this generous too.
+        options.MaximumReceiveMessageSize = 25 * 1024 * 1024;
+    });
     builder.Services.AddSingleton<NotificationEventService>();
     builder.Services.AddScoped<ToastService>();
     builder.Services.AddScoped<IRealTimeNotifier, SignalRNotifier>();
@@ -119,6 +133,7 @@ try
         IAppDbContext db,
         IFileStorageService storage,
         IFileValidationService validation,
+        IPdfCompressionService pdfCompression,
         ICurrentUserService currentUser,
         HttpContext ctx,
         int? docType) =>
@@ -138,11 +153,12 @@ try
         if (transaction.Status is TransactionStatus.Cancelled or TransactionStatus.Archived)
             return Results.BadRequest("لا يمكن إضافة مستندات لمعاملة ملغاة أو مؤرشفة");
 
-        // Check document count limit
-        var docCount = await db.TransactionDocuments
-            .CountAsync(d => d.TransactionId == transactionId);
-        if (docCount >= 10)
-            return Results.BadRequest("تم الوصول إلى الحد الأقصى (10 مستندات لكل معاملة)");
+        // One file per user per transaction (sender or receiver each get exactly one slot).
+        var uploaderId = Guid.Parse(userId);
+        var existingForUser = await db.TransactionDocuments
+            .AnyAsync(d => d.TransactionId == transactionId && d.UploadedByUserId == uploaderId);
+        if (existingForUser)
+            return Results.BadRequest("لقد قمت برفع ملف لهذه المعاملة بالفعل. يُسمح بملف واحد فقط لكل مستخدم.");
 
         // Validate file
         using var stream = file.OpenReadStream();
@@ -153,16 +169,26 @@ try
         // Reset stream position after validation
         stream.Position = 0;
 
+        // Compress PDF (PdfSharpCore — MIT). Falls back to original on failure.
+        var compression = await pdfCompression.CompressAsync(stream);
+
+        // Hard cap: post-compression size must not exceed 5 MB.
+        const long MaxCompressedBytes = 5L * 1024 * 1024;
+        if (compression.CompressedSizeBytes > MaxCompressedBytes)
+        {
+            compression.OutputStream.Dispose();
+            var sizeMb = compression.CompressedSizeBytes / (1024.0 * 1024.0);
+            return Results.BadRequest(
+                $"حجم الملف بعد الضغط ({sizeMb:F2} ميجا) يتجاوز الحد المسموح (5 ميجا). يرجى تقليل حجم الملف الأصلي.");
+        }
+
+        await using var uploadStream = compression.OutputStream;
+
         // Upload file
-        var result = await storage.UploadAsync(stream, file.FileName, file.ContentType);
+        var result = await storage.UploadAsync(uploadStream, file.FileName, file.ContentType);
 
-        // Calculate version: if same filename exists, increment version
+        // Save document record (one per user — version is always 1)
         var fileName = Path.GetFileName(file.FileName);
-        var maxVersion = await db.TransactionDocuments
-            .Where(d => d.TransactionId == transactionId && d.OriginalFileName == fileName)
-            .MaxAsync(d => (int?)d.Version) ?? 0;
-
-        // Save document record
         var document = new TransactionDocument
         {
             Id = Guid.NewGuid(),
@@ -175,15 +201,26 @@ try
             DocumentType = docType.HasValue && Enum.IsDefined(typeof(DocumentType), docType.Value)
                 ? (DocumentType)docType.Value
                 : DocumentType.Attachment,
-            Version = maxVersion + 1,
-            UploadedByUserId = Guid.Parse(userId),
+            Version = 1,
+            UploadedByUserId = uploaderId,
             UploadedAt = DateTime.UtcNow
         };
 
         db.TransactionDocuments.Add(document);
         await db.SaveChangesAsync();
 
-        return Results.Ok(new { document.Id, document.OriginalFileName, document.FileSizeBytes });
+        return Results.Ok(new
+        {
+            document.Id,
+            document.OriginalFileName,
+            document.FileSizeBytes,
+            originalSizeBytes = compression.OriginalSizeBytes,
+            compressedSizeBytes = compression.CompressedSizeBytes,
+            wasCompressed = compression.WasCompressed,
+            savedPercent = compression.OriginalSizeBytes > 0
+                ? Math.Round((1 - (double)compression.CompressedSizeBytes / compression.OriginalSizeBytes) * 100, 1)
+                : 0
+        });
     }).RequireAuthorization().DisableAntiforgery();
 
     // Download document

@@ -137,26 +137,26 @@
                     {
                         index++;
                         <tr>
-                            <td>@index</td>
-                            <td><span class="ref-number">@t.ReferenceNumber</span></td>
-                            <td class="subject-cell">@t.Subject</td>
-                            <td><span class="hb-badge hb-badge-primary">@GetTypeLabel(t.Type)</span></td>
-                            <td>@(t.SenderBranch?.NameAr ?? "—")</td>
-                            <td>@(t.ReceiverBranch?.NameAr ?? "—")</td>
-                            <td>
+                            <td data-label="#">@index</td>
+                            <td data-label="رقم المرجع"><span class="ref-number">@t.ReferenceNumber</span></td>
+                            <td data-label="الموضوع" class="subject-cell">@t.Subject</td>
+                            <td data-label="النوع"><span class="hb-badge hb-badge-primary">@GetTypeLabel(t.Type)</span></td>
+                            <td data-label="من">@(t.SenderBranch?.NameAr ?? "—")</td>
+                            <td data-label="إلى">@(t.ReceiverBranch?.NameAr ?? "—")</td>
+                            <td data-label="الأولوية">
                                 <span class="hb-badge priority-badge @GetPriorityBadgeClass(t.Priority)">
                                     <i class="@GetPriorityIcon(t.Priority)"></i>
                                     <span>@GetPriorityLabel(t.Priority)</span>
                                 </span>
                             </td>
-                            <td>
+                            <td data-label="الحالة">
                                 <span class="status-badge @GetStatusClass(t.Status)">
                                     <i class="@GetStatusIcon(t.Status)"></i>
                                     @GetStatusLabel(t.Status)
                                 </span>
                             </td>
-                            <td class="date-cell">@t.CreatedAt.ToString("yyyy/MM/dd")</td>
-                            <td>
+                            <td data-label="التاريخ" class="date-cell">@t.CreatedAt.ToString("yyyy/MM/dd")</td>
+                            <td data-label="إجراءات">
                                 <div class="action-buttons">
                                     <a href="/transactions/@t.Id" class="action-btn view" title="عرض التفاصيل">
                                         <i class="bi bi-eye"></i>

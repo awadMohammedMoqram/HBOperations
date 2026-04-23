@@ -29,7 +29,7 @@
         <label for="@_inputId" class="upload-label">
             <i class="bi bi-cloud-arrow-up"></i>
             <span class="upload-text">اسحب ملفات PDF هنا أو <strong>اضغط للاختيار</strong></span>
-            <span class="upload-hint">PDF فقط — حتى 50 ميجابايت لكل ملف — 10 ملفات كحد أقصى</span>
+            <span class="upload-hint">PDF فقط — حتى 5 ملفات، بإجمالي 20 ميجابايت</span>
         </label>
     }
 </div>
@@ -58,7 +58,9 @@
     private int _totalFiles;
     private readonly List<string> _errors = [];
 
-    private const long MaxFileSize = 50 * 1024 * 1024; // 50MB
+    private const long MaxFileSize = 20L * 1024 * 1024; // 20MB total cap
+    private const int MaxFiles = 5;
+    private const long MaxTotalBytes = 20L * 1024 * 1024; // 20MB total
 
     private void HandleDragEnter() => _isDragging = true;
     private void HandleDragLeave() => _isDragging = false;
@@ -67,19 +69,28 @@
     private async Task HandleFileSelection(InputFileChangeEventArgs e)
     {
         _errors.Clear();
-        var files = e.GetMultipleFiles(10);
+        var files = e.GetMultipleFiles(MaxFiles);
         _totalFiles = files.Count;
         _uploadedCount = 0;
         _uploading = true;
+        long uploadedBytes = 0;
         StateHasChanged();
 
         foreach (var file in files)
         {
             try
             {
+                if (uploadedBytes + file.Size > MaxTotalBytes)
+                {
+                    _errors.Add($"{file.Name}: تجاوز الحد الأقصى للحجم الإجمالي (20 ميجا)");
+                    _uploadedCount++;
+                    StateHasChanged();
+                    continue;
+                }
+
                 if (file.Size > MaxFileSize)
                 {
-                    _errors.Add($"{file.Name}: حجم الملف يتجاوز 50 ميجابايت");
+                    _errors.Add($"{file.Name}: حجم الملف يتجاوز 20 ميجابايت");
                     _uploadedCount++;
                     StateHasChanged();
                     continue;
@@ -115,6 +126,10 @@
                 {
                     var errorText = await response.Content.ReadAsStringAsync();
                     _errors.Add($"{file.Name}: {errorText}");
+                }
+                else
+                {
+                    uploadedBytes += file.Size;
                 }
             }
             catch (Exception ex)
