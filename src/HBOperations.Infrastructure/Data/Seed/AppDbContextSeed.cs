@@ -14,7 +14,6 @@ public static class AppDbContextSeed
     {
         using var scope = serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppDbContext>>();
 
@@ -22,9 +21,8 @@ public static class AppDbContextSeed
         {
             await context.Database.MigrateAsync();
             await SeedRolesAsync(roleManager);
-            var branches = await SeedBranchesAsync(context);
-            var departments = await SeedDepartmentsAsync(context);
-            await SeedUsersAsync(userManager, branches, departments);
+            await SeedBranchesAsync(context);
+            await SeedDepartmentsAsync(context);
             await SeedSystemSettingsAsync(context);
             logger.LogInformation("Seed data completed successfully");
         }
@@ -62,10 +60,9 @@ public static class AppDbContextSeed
         }
     }
 
-    private static async Task<Dictionary<string, Guid>> SeedBranchesAsync(AppDbContext context)
+    private static async Task SeedBranchesAsync(AppDbContext context)
     {
-        if (await context.Branches.AnyAsync())
-            return await context.Branches.ToDictionaryAsync(b => b.Code, b => b.Id);
+        if (await context.Branches.AnyAsync()) return;
 
         var hqId = Guid.NewGuid();
         var branches = new List<Branch>
@@ -88,13 +85,11 @@ public static class AppDbContextSeed
 
         context.Branches.AddRange(branches);
         await context.SaveChangesAsync();
-        return branches.ToDictionary(b => b.Code, b => b.Id);
     }
 
-    private static async Task<Dictionary<string, Guid>> SeedDepartmentsAsync(AppDbContext context)
+    private static async Task SeedDepartmentsAsync(AppDbContext context)
     {
-        if (await context.Departments.AnyAsync())
-            return await context.Departments.ToDictionaryAsync(d => d.Code, d => d.Id);
+        if (await context.Departments.AnyAsync()) return;
 
         var departments = new List<Department>
         {
@@ -117,170 +112,6 @@ public static class AppDbContextSeed
 
         context.Departments.AddRange(departments);
         await context.SaveChangesAsync();
-        return departments.ToDictionary(d => d.Code, d => d.Id);
-    }
-
-    private static async Task SeedUsersAsync(
-        UserManager<ApplicationUser> userManager,
-        Dictionary<string, Guid> branches,
-        Dictionary<string, Guid> departments)
-    {
-        // Seed the system admin first
-        if (await userManager.FindByEmailAsync("admin@hadhramoutbank.com") is null)
-        {
-            var admin = new ApplicationUser
-            {
-                UserName = "admin@hadhramoutbank.com",
-                Email = "admin@hadhramoutbank.com",
-                FullNameAr = "مدير النظام",
-                JobTitle = "مدير تقنية المعلومات",
-                EmailConfirmed = true,
-                BranchId = branches.GetValueOrDefault("HQ"),
-                DepartmentId = departments.GetValueOrDefault("DEP-IT"),
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-            await userManager.CreateAsync(admin, "Admin@123456");
-            await userManager.AddToRolesAsync(admin, ["SuperAdmin", "ITAdmin"]);
-        }
-
-        // Seed all bank staff
-        var users = new (string Email, string FullName, string JobTitle, string Role, string? BranchCode, string? DeptCode)[]
-        {
-            ("abdulnasser.alhaj@hb.com", "عبدالناصر نعمان محمد الحاج", "الرئيس التنفيذي", "CEO", "HQ", null),
-            ("yousuf.almuzeqir@hb.com", "يوسف يحيى حسين المزيقر", "مساعد الرئيس التنفيذي للخزينة والاستثمار", "AssistantCEO", "HQ", "DEP-TRS"),
-            ("alnuman.bakir@hb.com", "النعمان عبدالله عبدالرحمن بكير", "مساعد الرئيس التنفيذي للعمليات وتقنية المعلومات", "AssistantCEO", "HQ", "DEP-OPS"),
-            ("bassam.ahmed@hb.com", "بسام عبدالله مرعي احمد", "مدير إدارة العمليات المركزية", "DepartmentManager", "HQ", "DEP-OPS"),
-            ("jamal.alwahbi@hb.com", "جمال امين عبدالله محمد الوهبي", "مدير إدارة التدقيق الداخلي", "Auditor", "HQ", "DEP-AUD"),
-            ("amin.alsaghir@hb.com", "أمين محمد أمين الصغير", "مدير إدارة الامتثال", "ComplianceOfficer", "HQ", "DEP-CMP"),
-            ("mohammed.bakir@hb.com", "محمد عبدالله عبد الرحمن بكير", "مدير إدارة الخزينة", "DepartmentManager", "HQ", "DEP-TRS"),
-            ("khalid.barakat@hb.com", "خالد محمد عوض بركات", "مدير إدارة الرقابة على الائتمان", "DepartmentManager", "HQ", "DEP-CRD"),
-            ("mohammed.alkubsi@hb.com", "محمد يحيى محمد الكبسي", "مدير إدارة الرقابة الشرعية", "ShariahAuditor", "HQ", "DEP-SHR"),
-            ("waseem.bashr@hb.com", "وسيم محمد سعيد بشر", "مدير إدارة الدفع الالكتروني", "DepartmentManager", "HQ", "DEP-EPY"),
-            ("ali.alraimi@hb.com", "علي حسن محمد الريمي", "مدير الإدارة المالية", "DepartmentManager", "HQ", "DEP-FIN"),
-            ("mohammed.alhabashi@hb.com", "محمد احمد علي الحبشي", "مدير إدارة التمويل", "DepartmentManager", "HQ", "DEP-FND"),
-            ("mohammed.alsalahm@hb.com", "محمد علي محمد الصلاهم", "مدير إدارة الموارد البشرية", "DepartmentManager", "HQ", "DEP-HRM"),
-            ("intisar.alsabahi@hb.com", "انتصار علي محمد الصباحي", "مديرة إدارة المخاطر", "DepartmentManager", "HQ", "DEP-RSK"),
-            ("majid.salim@hb.com", "ماجد علوي علي سالم", "مدير إدارة الرقابة على العمليات", "DepartmentManager", "HQ", "DEP-OPC"),
-            ("hamdi.saeed@hb.com", "حمدي خالد أحمد محمد سعيد", "مدير إدارة التنظيم والجودة", "DepartmentManager", "HQ", "DEP-QAL"),
-            ("samih.alkhamer@hb.com", "سامح عبدالله سالم الخامر", "مدير إدارة الشئون الإدارية", "DepartmentManager", "HQ", "DEP-ADM"),
-            ("mohammed.binsuroor@hb.com", "محمد مبارك أحمد بن سرور", "مدير إدارة تقنية المعلومات", "ITAdmin", "HQ", "DEP-IT"),
-            ("khalid.mutafi@hb.com", "خالد مبارك محمد متعافي", "مدير الفرع الرئيسي", "BranchManager", "BR-MAIN", null),
-            ("ayman.alhamwi@hb.com", "ايمن سالم العبد الحموي", "ق.ب مدير فرع فوه", "BranchManager", "BR-FUW", null),
-            ("abdullah.aljafri@hb.com", "عبدالله جيلاني عبدالله الجفري", "مدير فرع تريم", "BranchManager", "BR-TRM", null),
-            ("abdulkarim.binshahbal@hb.com", "عبدالكريم قاسم بن شحبل", "مدير فرع عتق", "BranchManager", "BR-ATQ", null),
-            ("anisa.mahdi@hb.com", "انيسة علي عبدالسلام مهدي", "مديرة فرع عدن", "BranchManager", "BR-ADN", null),
-            ("amer.alsaqaf@hb.com", "عامر عبدالولي عبدالعزيز السقاف", "مدير فرع ال90 - عدن", "BranchManager", "BR-AD90", null),
-            ("ali.alnaqeeb@hb.com", "علي محمد صالح النقيب", "مدير فرع سيئون", "BranchManager", "BR-SYN", null),
-            ("jihad.alsaqaf@hb.com", "جهاد إبراهيم محمد السقاف", "مدير فرع بويش", "BranchManager", "BR-BWS", null),
-            ("hafeez.bahdila@hb.com", "حفيظ سالم محفوظ باهديلة", "مدير فرع الشحر", "BranchManager", "BR-SHR", null),
-            ("aziz.hamda@hb.com", "عزيز صالح عبود حمدة", "ق.ب مدير فرع الغيضة", "BranchManager", "BR-GYD", null),
-            ("ali.alawlaqi@hb.com", "علي عبدالله صالح العولقي", "مدير مكتب المطار", "OfficeManager", "OF-APT", null),
-            ("mahrous.barsheed@hb.com", "محروس عبدالله بارشيد", "مدير مكتب بن عزون", "OfficeManager", "OF-BNZ", null),
-            ("ahmed.binsalm@hb.com", "أحمد عبدالرحيم بن سلم", "مدير مكتب عدن مول", "OfficeManager", "OF-ADM", null),
-        };
-
-        foreach (var (email, fullName, jobTitle, role, branchCode, deptCode) in users)
-        {
-            if (await userManager.FindByEmailAsync(email) is not null) continue;
-
-            var user = new ApplicationUser
-            {
-                UserName = email,
-                Email = email,
-                FullNameAr = fullName,
-                JobTitle = jobTitle,
-                EmailConfirmed = true,
-                BranchId = branchCode is not null ? branches.GetValueOrDefault(branchCode) : null,
-                DepartmentId = deptCode is not null ? departments.GetValueOrDefault(deptCode) : null,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            var createResult = await userManager.CreateAsync(user, "Hb@2026Pass!");
-            if (!createResult.Succeeded) continue;
-            await userManager.AddToRoleAsync(user, role);
-        }
-
-        // ── موظفون تجريبيون عشوائيون ─────────────────────────
-        await SeedRandomStaffAsync(userManager, branches, departments);
-    }
-
-    private static async Task SeedRandomStaffAsync(
-        UserManager<ApplicationUser> userManager,
-        Dictionary<string, Guid> branches,
-        Dictionary<string, Guid> departments)
-    {
-        // أسماء عربية شائعة لتوليد بيانات اختبار
-        string[] firstNames = ["محمد", "أحمد", "علي", "خالد", "سالم", "عبدالله", "حسن", "إبراهيم", "يوسف", "عمر",
-                               "فاطمة", "عائشة", "خديجة", "مريم", "زينب", "هند", "نورا", "سارة", "ريم", "لينا"];
-        string[] lastNames = ["باعمر", "بامطرف", "باحاج", "بن سميط", "العطاس", "الكثيري", "الحامد", "العمودي",
-                              "بازرعة", "بن شيخ", "السقاف", "الشاطري", "بن لادن", "الجابري", "العولقي", "الحمومي"];
-        string[] branchTitles = ["موظف خدمة عملاء", "صراف", "موظف تمويل", "موظف ائتمان", "موظف خزينة فرعية", "موظف خدمات إلكترونية"];
-        string[] deptTitles = ["محلل عمليات", "محاسب", "موظف موارد بشرية", "أخصائي امتثال", "مدقق داخلي", "أخصائي مخاطر", "مهندس برمجيات", "أخصائي جودة"];
-
-        var rnd = new Random(42); // ثابت لإنتاج بيانات قابلة للتكرار
-
-        // 5 موظفين لكل فرع غير HQ
-        var nonHqBranches = branches.Where(kv => kv.Key != "HQ").ToList();
-        int counter = 1;
-        foreach (var (branchCode, branchId) in nonHqBranches)
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                var first = firstNames[rnd.Next(firstNames.Length)];
-                var last = lastNames[rnd.Next(lastNames.Length)];
-                var title = branchTitles[rnd.Next(branchTitles.Length)];
-                var email = $"staff{counter:D3}.{branchCode.ToLower()}@hb.com";
-                counter++;
-                if (await userManager.FindByEmailAsync(email) is not null) continue;
-
-                var user = new ApplicationUser
-                {
-                    UserName = email,
-                    Email = email,
-                    FullNameAr = $"{first} {last}",
-                    JobTitle = title,
-                    EmailConfirmed = true,
-                    BranchId = branchId,
-                    DepartmentId = null,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-                var res = await userManager.CreateAsync(user, "Hb@2026Pass!");
-                if (res.Succeeded) await userManager.AddToRoleAsync(user, "BranchStaff");
-            }
-        }
-
-        // 3 موظفين لكل إدارة في HQ
-        var hqId = branches.GetValueOrDefault("HQ");
-        foreach (var (deptCode, deptId) in departments)
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                var first = firstNames[rnd.Next(firstNames.Length)];
-                var last = lastNames[rnd.Next(lastNames.Length)];
-                var title = deptTitles[rnd.Next(deptTitles.Length)];
-                var email = $"staff{counter:D3}.{deptCode.ToLower()}@hb.com";
-                counter++;
-                if (await userManager.FindByEmailAsync(email) is not null) continue;
-
-                var user = new ApplicationUser
-                {
-                    UserName = email,
-                    Email = email,
-                    FullNameAr = $"{first} {last}",
-                    JobTitle = title,
-                    EmailConfirmed = true,
-                    BranchId = hqId,
-                    DepartmentId = deptId,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-                var res = await userManager.CreateAsync(user, "Hb@2026Pass!");
-                if (res.Succeeded) await userManager.AddToRoleAsync(user, "DepartmentStaff");
-            }
-        }
     }
 
     private static async Task SeedSystemSettingsAsync(AppDbContext context)
