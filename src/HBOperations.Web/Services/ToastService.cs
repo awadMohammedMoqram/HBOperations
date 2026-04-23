@@ -1,3 +1,5 @@
+using Microsoft.JSInterop;
+
 namespace HBOperations.Web.Services;
 
 public enum ToastType
@@ -8,32 +10,40 @@ public enum ToastType
     Info
 }
 
-public record ToastMessage(Guid Id, ToastType Type, string Title, string? Message, int DurationMs);
-
 /// <summary>
-/// In-process toast notification service for Blazor Server.
-/// Inject as Scoped — each circuit gets its own instance.
+/// JS-based toast notification service for Blazor Server.
+/// Renders toasts via pure JavaScript — auto-dismiss & manual dismiss work reliably.
+/// Inject as Scoped.
 /// </summary>
 public class ToastService
 {
-    public event Func<ToastMessage, Task>? OnShow;
+    private readonly IJSRuntime _js;
+
+    public ToastService(IJSRuntime js)
+    {
+        _js = js;
+    }
 
     public Task ShowSuccessAsync(string title, string? message = null, int durationMs = 4000)
-        => RaiseAsync(ToastType.Success, title, message, durationMs);
+        => InvokeJsAsync("success", title, message, durationMs);
 
     public Task ShowErrorAsync(string title, string? message = null, int durationMs = 6000)
-        => RaiseAsync(ToastType.Error, title, message, durationMs);
+        => InvokeJsAsync("error", title, message, durationMs);
 
     public Task ShowWarningAsync(string title, string? message = null, int durationMs = 5000)
-        => RaiseAsync(ToastType.Warning, title, message, durationMs);
+        => InvokeJsAsync("warning", title, message, durationMs);
 
     public Task ShowInfoAsync(string title, string? message = null, int durationMs = 4000)
-        => RaiseAsync(ToastType.Info, title, message, durationMs);
+        => InvokeJsAsync("info", title, message, durationMs);
 
-    private async Task RaiseAsync(ToastType type, string title, string? message, int durationMs)
+    private async Task InvokeJsAsync(string type, string title, string? message, int durationMs)
     {
-        var toast = new ToastMessage(Guid.NewGuid(), type, title, message, durationMs);
-        if (OnShow is not null)
-            await OnShow.Invoke(toast);
+        try
+        {
+            await _js.InvokeVoidAsync("HBToast.show", type, title, message, durationMs);
+        }
+        catch (InvalidOperationException) { /* prerendering — JS not available yet */ }
+        catch (JSDisconnectedException) { /* circuit closed */ }
+        catch (JSException) { /* JS error */ }
     }
 }

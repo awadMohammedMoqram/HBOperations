@@ -58,7 +58,7 @@ public static class DependencyInjection
             options.LogoutPath = "/logout";
             options.AccessDeniedPath = "/access-denied";
             options.Cookie.HttpOnly = true;
-            options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
             options.ExpireTimeSpan = TimeSpan.FromHours(8);
             options.SlidingExpiration = true;
         });

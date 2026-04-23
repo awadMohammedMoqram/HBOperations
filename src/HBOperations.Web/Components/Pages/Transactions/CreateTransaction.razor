@@ -15,6 +15,7 @@
 @inject INotificationService NotificationService
 @inject IFileStorageService FileStorage
 @inject IFileValidationService FileValidation
+@inject HBOperations.Web.Services.ToastService Toast
 
 <PageTitle>معاملة جديدة - بنك حضرموت</PageTitle>
 
@@ -29,20 +30,13 @@
         </div>
     </div>
 
-    @if (!string.IsNullOrEmpty(_errorMessage))
-    {
-        <div class="hb-alert hb-alert-danger">
-            <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
-        </div>
-    }
-
     <div class="form-layout">
         <div class="hb-card">
             <div class="hb-card-header">
                 <h2 class="hb-card-title"><i class="bi bi-file-earmark-plus"></i> بيانات المعاملة</h2>
             </div>
 
-            <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="CreateTransaction">
+            <EditForm Model="_model" OnSubmit="HandleSubmit" FormName="CreateTransaction">
                 <div class="form-grid">
                     <div class="hb-form-group full-width sender-info-banner">
                         <label class="hb-form-label">
@@ -241,7 +235,6 @@
     private string? _currentBranchName;
     private string? _currentDepartmentName;
     private bool _submitting;
-    private string? _errorMessage;
     private Guid? _hqBranchId;
     private bool _isHqSelected;
     private readonly List<PendingFile> _pendingFiles = new();
@@ -250,17 +243,16 @@
 
     private async Task HandleFilesSelected(InputFileChangeEventArgs e)
     {
-        _errorMessage = null;
         foreach (var file in e.GetMultipleFiles(MaxFiles))
         {
             if (_pendingFiles.Count >= MaxFiles)
             {
-                _errorMessage = $"الحد الأقصى {MaxFiles} ملفات";
+                await Toast.ShowWarningAsync($"الحد الأقصى {MaxFiles} ملفات");
                 break;
             }
             if (file.Size > MaxFileBytes)
             {
-                _errorMessage = $"الملف '{file.Name}' أكبر من 10MB";
+                await Toast.ShowWarningAsync("ملف كبير", $"الملف '{file.Name}' أكبر من 10MB");
                 continue;
             }
             using var ms = new MemoryStream();
@@ -400,54 +392,48 @@
     private async Task HandleSubmit()
     {
         _submitting = true;
-        _errorMessage = null;
 
         try
         {
             if (string.IsNullOrWhiteSpace(_model.Subject))
             {
-                _errorMessage = "يرجى إدخال موضوع المعاملة";
+                await Toast.ShowErrorAsync("يرجى إدخال موضوع المعاملة");
                 return;
             }
 
             if (string.IsNullOrEmpty(_model.ReceiverBranchId))
             {
-                _errorMessage = "يرجى اختيار الفرع المستلِم";
+                await Toast.ShowErrorAsync("يرجى اختيار الفرع المستلِم");
                 return;
             }
 
             if (_isHqSelected && string.IsNullOrEmpty(_model.ReceiverDepartmentId))
             {
-                _errorMessage = "يرجى اختيار الإدارة المستلِمة";
+                await Toast.ShowErrorAsync("يرجى اختيار الإدارة المستلِمة");
                 return;
             }
 
             if (string.IsNullOrEmpty(_model.ReceiverUserId))
             {
-                _errorMessage = "يرجى اختيار الشخص المستلِم";
+                await Toast.ShowErrorAsync("يرجى اختيار الشخص المستلِم");
                 return;
             }
 
             if (_model.DueDate.HasValue && _model.DueDate.Value < DateTime.Now)
             {
-                _errorMessage = "تاريخ الاستحقاق لا يمكن أن يكون في الماضي";
+                await Toast.ShowErrorAsync("تاريخ الاستحقاق لا يمكن أن يكون في الماضي");
                 return;
             }
 
-            // وقت الإرسال الفعلي — يدخله المستخدم. نتحقق من المعقولية.
-            var sentAtLocal = DateTime.SpecifyKind(_model.SentAt, DateTimeKind.Local);
-            var sentAtUtc = sentAtLocal.ToUniversalTime();
-            if (sentAtUtc > DateTime.UtcNow.AddMinutes(5))
-            {
-                _errorMessage = "تاريخ الإرسال الفعلي لا يمكن أن يكون في المستقبل";
-                return;
-            }
+            // وقت الإرسال الفعلي — يدخله المستخدم يدوياً (متى تم إرسال المعاملة فعلياً)
+            // نحفظه كما هو بدون تحويل timezone (السيرفر قد يكون في timezone مختلف)
+            var sentAtUtc = DateTime.SpecifyKind(_model.SentAt, DateTimeKind.Utc);
 
             var receiverUserId = Guid.Parse(_model.ReceiverUserId!);
             var receiverUser = _receiverUsers.FirstOrDefault(u => u.Id == receiverUserId);
             if (receiverUser is null)
             {
-                _errorMessage = "الشخص المستلِم المختار غير صالح";
+                await Toast.ShowErrorAsync("الشخص المستلِم المختار غير صالح");
                 return;
             }
 
@@ -512,7 +498,7 @@
                         var validation = FileValidation.Validate(validateStream, pf.Name, pf.ContentType, pf.Size);
                         if (!validation.IsValid)
                         {
-                            _errorMessage = $"الملف '{pf.Name}' غير صالح: {validation.ErrorMessage}";
+                            await Toast.ShowWarningAsync("ملف غير صالح", $"'{pf.Name}': {validation.ErrorMessage}");
                             continue;
                         }
 
@@ -559,7 +545,7 @@
         }
         catch (Exception ex)
         {
-            _errorMessage = $"حدث خطأ أثناء إنشاء المعاملة: {ex.Message}";
+            await Toast.ShowErrorAsync("حدث خطأ", ex.Message);
         }
         finally
         {
