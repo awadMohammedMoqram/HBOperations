@@ -144,7 +144,15 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        // Refresh unread count when navigating (e.g., after marking notification as read)
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadUnreadCount();
+            StateHasChanged();
+        });
+    }
     private void ToggleMobileMenu() => isMobileMenuOpen = !isMobileMenuOpen;
     private void CloseMobileMenu() => isMobileMenuOpen = false;
 

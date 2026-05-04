@@ -15,6 +15,7 @@ public static class AppDbContextSeed
         using var scope = serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppDbContext>>();
 
         try
@@ -24,6 +25,7 @@ public static class AppDbContextSeed
             await SeedBranchesAsync(context);
             await SeedDepartmentsAsync(context);
             await SeedSystemSettingsAsync(context);
+            await SeedAdminAffairsStaffAsync(context, userManager, logger);
             logger.LogInformation("Seed data completed successfully");
         }
         catch (Exception ex)
@@ -136,5 +138,64 @@ public static class AppDbContextSeed
 
         context.SystemSettings.AddRange(settings);
         await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedAdminAffairsStaffAsync(
+        AppDbContext context,
+        UserManager<ApplicationUser> userManager,
+        ILogger logger)
+    {
+        // Only run once: if سعيد قمري already exists, skip
+        const string newEmail = "saeed.qamari@hb.com";
+        if (await userManager.FindByEmailAsync(newEmail) != null)
+            return;
+
+        // Remove old staff members from إدارة الشئون الإدارية
+        var oldEmails = new[] { "staff096.dep-adm@hb.com", "staff097.dep-adm@hb.com", "staff098.dep-adm@hb.com" };
+        foreach (var email in oldEmails)
+        {
+            var oldUser = await userManager.FindByEmailAsync(email);
+            if (oldUser != null)
+            {
+                await userManager.DeleteAsync(oldUser);
+                logger.LogInformation("Deleted old user: {Email}", email);
+            }
+        }
+
+        // Get إدارة الشئون الإدارية department and الإدارة العامة branch
+        var adminDept = await context.Departments.FirstOrDefaultAsync(d => d.Code == "DEP-ADM");
+        var hqBranch = await context.Branches.FirstOrDefaultAsync(b => b.Code == "HQ");
+
+        if (adminDept == null || hqBranch == null)
+        {
+            logger.LogWarning("Cannot seed سعيد قمري: DEP-ADM or HQ not found");
+            return;
+        }
+
+        // Create سعيد قمري
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            FullNameAr = "سعيد قمري",
+            Email = newEmail,
+            UserName = newEmail,
+            BranchId = hqBranch.Id,
+            DepartmentId = adminDept.Id,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            EmailConfirmed = true
+        };
+
+        var result = await userManager.CreateAsync(user, "Admin@123456");
+        if (result.Succeeded)
+        {
+            await userManager.AddToRoleAsync(user, "DepartmentStaff");
+            logger.LogInformation("Created user سعيد قمري ({Email}) in إدارة الشئون الإدارية", newEmail);
+        }
+        else
+        {
+            logger.LogError("Failed to create سعيد قمري: {Errors}",
+                string.Join(", ", result.Errors.Select(e => e.Description)));
+        }
     }
 }

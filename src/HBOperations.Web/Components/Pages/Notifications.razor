@@ -185,6 +185,6 @@
         if (diff.TotalMinutes < 60) return $"منذ {(int)diff.TotalMinutes} دقيقة";
         if (diff.TotalHours < 24) return $"منذ {(int)diff.TotalHours} ساعة";
         if (diff.TotalDays < 7) return $"منذ {(int)diff.TotalDays} يوم";
-        return dt.ToString("yyyy/MM/dd");
+        return AppTime.FormatYemen(dt, "yyyy/MM/dd");
     }
 }

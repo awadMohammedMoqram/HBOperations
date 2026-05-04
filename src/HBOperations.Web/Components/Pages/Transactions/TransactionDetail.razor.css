@@ -1368,6 +1368,59 @@
 /* === Action card variants === */
 .action-card-receiver { border-right: 4px solid #1565c0; }
 .action-card-admin { border-right: 4px solid #6c757d; }
+.action-card-admin-affairs { border-right: 4px solid #00796b; }
+
+/* === Toggle Switch (self-delivery) === */
+.hb-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    cursor: pointer;
+    user-select: none;
+}
+.hb-toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 42px;
+    height: 24px;
+    flex-shrink: 0;
+}
+.hb-toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+.hb-toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: #ccc;
+    border-radius: 24px;
+    transition: background 0.25s ease;
+}
+.hb-toggle-slider::before {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    top: 3px;
+    right: 3px;
+    transition: transform 0.25s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.hb-toggle-switch input:checked + .hb-toggle-slider {
+    background: #00796b;
+}
+.hb-toggle-switch input:checked + .hb-toggle-slider::before {
+    transform: translateX(-18px);
+}
+.hb-toggle-text {
+    font-size: 0.88rem;
+    color: #344054;
+    font-weight: 500;
+}
 
 /* === Notes Card (party notes) === */
 .notes-card { margin-bottom: 1rem; }
@@ -1433,6 +1486,28 @@
 .upload-dropzone.has-files .upload-icon { color: #2e7d32; box-shadow: 0 2px 8px rgba(46, 125, 50, 0.15); }
 .upload-title { font-weight: 700; color: #2c2c2c; margin-bottom: 0.35rem; font-size: 0.95rem; }
 .upload-hint { color: #6b7280; font-size: 0.8rem; }
+
+/* === Upload Loading Overlay === */
+.upload-dropzone.is-uploading { border-color: #1565c0; background: #f3f8ff; pointer-events: none; }
+.upload-loading-overlay {
+    position: absolute; inset: 0; z-index: 5;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+    animation: hbFadeIn 0.2s ease;
+}
+.upload-loading-content { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; padding: 1rem; }
+.upload-spinner {
+    width: 48px !important; height: 48px !important;
+    border: 4px solid #e3e7ed !important;
+    border-top-color: #1565c0 !important;
+    border-radius: 50%;
+    animation: hbSpin 0.8s linear infinite;
+}
+.upload-loading-title { font-weight: 700; color: #1565c0; font-size: 1rem; }
+.upload-loading-hint { color: #6b7280; font-size: 0.825rem; }
+@keyframes hbSpin { to { transform: rotate(360deg); } }
+@keyframes hbFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* === Pending Files === */
 .pending-files-card { margin-top: 0.85rem; border: 1px solid #e3e7ed; border-radius: 10px; background: #fff; overflow: hidden; }

@@ -62,4 +62,68 @@ public class NotificationService(
             await realTimeNotifier.SendToUserAsync(notif.UserId, titleAr, messageAr, transactionId);
         }
     }
+
+    public async Task NotifyDepartmentAsync(Guid departmentId, string titleAr, string messageAr,
+        Guid? transactionId = null, NotificationType type = NotificationType.SystemAlert,
+        Guid? excludeUserId = null)
+    {
+        var usersInDept = await userManager.Users
+            .Where(u => u.DepartmentId == departmentId && u.IsActive)
+            .ToListAsync();
+
+        // استبعاد المرسل إذا كان من نفس الإدارة
+        if (excludeUserId.HasValue)
+            usersInDept = usersInDept.Where(u => u.Id != excludeUserId.Value).ToList();
+
+        var notifications = usersInDept.Select(u => new Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = u.Id,
+            TitleAr = titleAr,
+            MessageAr = messageAr,
+            Type = type,
+            TransactionId = transactionId,
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow
+        }).ToList();
+
+        context.Notifications.AddRange(notifications);
+        await context.SaveChangesAsync();
+
+        foreach (var notif in notifications)
+        {
+            await realTimeNotifier.SendToUserAsync(notif.UserId, titleAr, messageAr, transactionId);
+        }
+    }
+
+    public async Task MarkTeamNotificationsReadAsync(Guid departmentId, Guid transactionId, Guid actingUserId)
+    {
+        // عند قراءة أي عضو في الفريق → يتحول لمقروء عند الجميع
+        var teamUserIds = await userManager.Users
+            .Where(u => u.DepartmentId == departmentId && u.IsActive)
+            .Select(u => u.Id)
+            .ToListAsync();
+
+        var unread = await context.Notifications
+            .Where(n => teamUserIds.Contains(n.UserId)
+                        && n.TransactionId == transactionId
+                        && !n.IsRead)
+            .ToListAsync();
+
+        if (unread.Count == 0) return;
+
+        var now = DateTime.UtcNow;
+        foreach (var n in unread)
+        {
+            n.IsRead = true;
+            n.ReadAt = now;
+        }
+        await context.SaveChangesAsync();
+
+        // إرسال تحديث real-time لكل أعضاء الفريق (ليتم تحديث عداد الإشعارات)
+        foreach (var uid in teamUserIds.Where(id => id != actingUserId))
+        {
+            await realTimeNotifier.RefreshUserAsync(uid);
+        }
+    }
 }

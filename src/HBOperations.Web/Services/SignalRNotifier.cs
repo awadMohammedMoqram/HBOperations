@@ -31,4 +31,9 @@ public class SignalRNotifier(IHubContext<NotificationHub> hubContext, Notificati
                 Timestamp = DateTime.UtcNow
             });
     }
+
+    public async Task RefreshUserAsync(Guid userId)
+    {
+        await eventService.RaiseRefreshAsync(userId);
+    }
 }

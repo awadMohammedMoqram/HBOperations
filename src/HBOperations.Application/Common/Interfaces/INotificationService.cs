@@ -8,4 +8,8 @@ public interface INotificationService
         Guid? transactionId = null, NotificationType type = NotificationType.SystemAlert);
     Task NotifyRoleAsync(string role, string titleAr, string messageAr,
         Guid? transactionId = null, Guid? branchId = null, NotificationType type = NotificationType.SystemAlert);
+    Task NotifyDepartmentAsync(Guid departmentId, string titleAr, string messageAr,
+        Guid? transactionId = null, NotificationType type = NotificationType.SystemAlert,
+        Guid? excludeUserId = null);
+    Task MarkTeamNotificationsReadAsync(Guid departmentId, Guid transactionId, Guid actingUserId);
 }

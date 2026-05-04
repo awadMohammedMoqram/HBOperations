@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة عمليات الاستلام والتسليم — بنك حضرموت</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Cairo:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- Navigation Bar -->
+    <nav class="nav-bar" id="navBar">
+        <div class="nav-brand">
+            <img src="../src/HBOperations.Web/wwwroot/Images/aboutLogo-fDwVp-So.svg" alt="بنك حضرموت" class="nav-logo">
+            <span>HBOperations</span>
+        </div>
+        <div class="nav-links">
+            <a href="#slide-0" class="nav-link active" data-slide="0">الغلاف</a>
+            <a href="#slide-1" class="nav-link" data-slide="1">الرؤية</a>
+            <a href="#slide-2" class="nav-link" data-slide="2">المعمارية</a>
+            <a href="#slide-3" class="nav-link" data-slide="3">سير العمل</a>
+            <a href="#slide-4" class="nav-link" data-slide="4">لوحة التحكم</a>
+            <a href="#slide-5" class="nav-link" data-slide="5">المعاملات</a>
+            <a href="#slide-6" class="nav-link" data-slide="6">الأمان</a>
+            <a href="#slide-7" class="nav-link" data-slide="7">المستندات</a>
+            <a href="#slide-8" class="nav-link" data-slide="8">الإشعارات</a>
+            <a href="#slide-9" class="nav-link" data-slide="9">التقارير</a>
+            <a href="#slide-10" class="nav-link" data-slide="10">الإدارة</a>
+            <a href="#slide-11" class="nav-link" data-slide="11">الأدوار</a>
+            <a href="#slide-12" class="nav-link" data-slide="12">التقنيات</a>
+            <a href="#slide-13" class="nav-link" data-slide="13">الخاتمة</a>
+        </div>
+        <div class="nav-progress">
+            <div class="nav-progress-bar" id="progressBar"></div>
+        </div>
+    </nav>
+
+    <!-- Slide Counter -->
+    <div class="slide-counter" id="slideCounter">
+        <span id="currentSlide">1</span> / <span id="totalSlides">14</span>
+    </div>
+
+    <!-- Keyboard Hint -->
+    <div class="keyboard-hint" id="keyboardHint">
+        <span><i class="bi bi-arrow-left"></i> <i class="bi bi-arrow-right"></i> للتنقل بين الشرائح</span>
+    </div>
+
+    <!-- ============================== SLIDES ============================== -->
+    <div class="slides-container" id="slidesContainer">
+
+        <!-- SLIDE 0: Cover -->
+        <section class="slide slide-cover active" id="slide-0">
+            <div class="cover-bg-pattern"></div>
+            <div class="cover-particles" id="particles0"></div>
+            <div class="cover-content">
+                <div class="cover-logo-wrapper">
+                    <div class="cover-logo-ring"></div>
+                    <div class="cover-logo-ring ring-2"></div>
+                    <img src="../src/HBOperations.Web/wwwroot/Images/aboutLogo-fDwVp-So.svg" alt="بنك حضرموت" class="cover-logo">
+                </div>
+                <h1 class="cover-title">
+                    <span class="cover-title-line">نظام إدارة عمليات</span>
+                    <span class="cover-title-line gold">الاستلام والتسليم</span>
+                </h1>
+                <p class="cover-subtitle">HBOperations — حل رقمي متكامل لإدارة المعاملات المصرفية الداخلية</p>
+                <div class="cover-meta">
+                    <div class="cover-meta-item">
+                        <i class="bi bi-building"></i>
+                        <span>بنك حضرموت</span>
+                    </div>
+                    <div class="cover-meta-divider"></div>
+                    <div class="cover-meta-item">
+                        <i class="bi bi-calendar3"></i>
+                        <span>2026</span>
+                    </div>
+                    <div class="cover-meta-divider"></div>
+                    <div class="cover-meta-item">
+                        <i class="bi bi-shield-check"></i>
+                        <span>عرض اعتماد النظام</span>
+                    </div>
+                </div>
+                <div class="cover-scroll-hint">
+                    <span>ابدأ العرض</span>
+                    <i class="bi bi-chevron-double-down"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 1: Vision & Problem -->
+        <section class="slide" id="slide-1">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">01</span>
+                    <h2 class="slide-title">الرؤية والمشكلة</h2>
+                    <p class="slide-subtitle">لماذا نحتاج هذا النظام؟</p>
+                </div>
+                <div class="two-columns">
+                    <div class="column">
+                        <div class="problem-card">
+                            <div class="problem-icon"><i class="bi bi-exclamation-triangle"></i></div>
+                            <h3>التحديات الحالية</h3>
+                            <ul class="problem-list">
+                                <li>
+                                    <i class="bi bi-x-circle"></i>
+                                    <span>تتبع يدوي للمعاملات بين الفروع والإدارات</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-x-circle"></i>
+                                    <span>صعوبة تحديد حالة المعاملة في الوقت الفعلي</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-x-circle"></i>
+                                    <span>غياب سجل تدقيق شامل للعمليات</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-x-circle"></i>
+                                    <span>تأخر في الإشعارات والتنبيهات</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-x-circle"></i>
+                                    <span>صعوبة إعداد التقارير والإحصائيات</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-x-circle"></i>
+                                    <span>مخاطر أمنية في إدارة المستندات الورقية</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="solution-card">
+                            <div class="solution-icon"><i class="bi bi-lightbulb"></i></div>
+                            <h3>الحل: HBOperations</h3>
+                            <ul class="solution-list">
+                                <li>
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    <span>نظام رقمي مركزي لتتبع كل معاملة</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    <span>رقم مرجعي تسلسلي فريد (HB-YYYYMM-XXXXX)</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    <span>إشعارات فورية عبر تقنية SignalR</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    <span>سجل تدقيق كامل لكل عملية</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    <span>تقارير تحليلية تفاعلية مع تصدير Excel/PDF</span>
+                                </li>
+                                <li>
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    <span>أمان بمستوى مصرفي (MFA + RBAC + تشفير)</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 2: Architecture -->
+        <section class="slide" id="slide-2">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">02</span>
+                    <h2 class="slide-title">المعمارية النظيفة</h2>
+                    <p class="slide-subtitle">Clean Architecture — بنية متينة وقابلة للتوسع</p>
+                </div>
+                <div class="arch-diagram">
+                    <div class="arch-layer arch-domain">
+                        <div class="arch-layer-icon"><i class="bi bi-diamond"></i></div>
+                        <h3>Domain</h3>
+                        <p>الكيانات الأساسية</p>
+                        <div class="arch-tags">
+                            <span class="arch-tag">Transaction</span>
+                            <span class="arch-tag">TransactionDocument</span>
+                            <span class="arch-tag">Branch</span>
+                            <span class="arch-tag">Department</span>
+                            <span class="arch-tag">Notification</span>
+                            <span class="arch-tag">AuditLog</span>
+                            <span class="arch-tag">SystemSetting</span>
+                        </div>
+                    </div>
+                    <div class="arch-arrow"><i class="bi bi-arrow-up"></i></div>
+                    <div class="arch-layer arch-application">
+                        <div class="arch-layer-icon"><i class="bi bi-gear-wide-connected"></i></div>
+                        <h3>Application</h3>
+                        <p>منطق الأعمال والقواعد</p>
+                        <div class="arch-tags">
+                            <span class="arch-tag">State Machine</span>
+                            <span class="arch-tag">MediatR</span>
+                            <span class="arch-tag">FluentValidation</span>
+                            <span class="arch-tag">DTOs</span>
+                            <span class="arch-tag">Interfaces</span>
+                        </div>
+                    </div>
+                    <div class="arch-arrow"><i class="bi bi-arrow-up"></i></div>
+                    <div class="arch-layer arch-infrastructure">
+                        <div class="arch-layer-icon"><i class="bi bi-hdd-stack"></i></div>
+                        <h3>Infrastructure</h3>
+                        <p>الخدمات والبنية التحتية</p>
+                        <div class="arch-tags">
+                            <span class="arch-tag">EF Core</span>
+                            <span class="arch-tag">Identity</span>
+                            <span class="arch-tag">File Storage</span>
+                            <span class="arch-tag">SignalR</span>
+                            <span class="arch-tag">Email</span>
+                            <span class="arch-tag">Audit</span>
+                        </div>
+                    </div>
+                    <div class="arch-arrow"><i class="bi bi-arrow-up"></i></div>
+                    <div class="arch-layer arch-web">
+                        <div class="arch-layer-icon"><i class="bi bi-window-stack"></i></div>
+                        <h3>Web (Blazor Server)</h3>
+                        <p>واجهة المستخدم التفاعلية</p>
+                        <div class="arch-tags">
+                            <span class="arch-tag">15 صفحة</span>
+                            <span class="arch-tag">Responsive</span>
+                            <span class="arch-tag">RTL</span>
+                            <span class="arch-tag">Real-time</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 3: Workflow -->
+        <section class="slide" id="slide-3">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">03</span>
+                    <h2 class="slide-title">سير عمل المعاملات</h2>
+                    <p class="slide-subtitle">State Machine — دورة حياة المعاملة من الإنشاء إلى الأرشفة</p>
+                </div>
+                <div class="workflow-container">
+                    <div class="workflow-step wf-active">
+                        <div class="wf-icon"><i class="bi bi-plus-circle"></i></div>
+                        <div class="wf-label">إنشاء المعاملة</div>
+                        <div class="wf-desc">المرسل ينشئ المعاملة<br>ويحدد المستلم والأولوية</div>
+                    </div>
+                    <div class="workflow-connector"><div class="wf-line"></div><i class="bi bi-arrow-left"></i></div>
+                    <div class="workflow-step wf-sent">
+                        <div class="wf-icon"><i class="bi bi-send"></i></div>
+                        <div class="wf-label">مُرسلة</div>
+                        <div class="wf-desc">في انتظار تأكيد<br>الاستلام من المستلم</div>
+                    </div>
+                    <div class="workflow-connector"><div class="wf-line"></div><i class="bi bi-arrow-left"></i></div>
+                    <div class="workflow-fork">
+                        <div class="workflow-step wf-received">
+                            <div class="wf-icon"><i class="bi bi-check-circle"></i></div>
+                            <div class="wf-label">مُستلمة</div>
+                            <div class="wf-desc">تم تأكيد الاستلام<br>بنجاح</div>
+                        </div>
+                        <div class="wf-or">أو</div>
+                        <div class="workflow-step wf-rejected">
+                            <div class="wf-icon"><i class="bi bi-x-circle"></i></div>
+                            <div class="wf-label">مرفوضة</div>
+                            <div class="wf-desc">مرفوضة مع ذكر<br>سبب الرفض (إلزامي)</div>
+                        </div>
+                    </div>
+                    <div class="workflow-connector"><div class="wf-line"></div><i class="bi bi-arrow-left"></i></div>
+                    <div class="workflow-step wf-archived">
+                        <div class="wf-icon"><i class="bi bi-archive"></i></div>
+                        <div class="wf-label">مؤرشفة</div>
+                        <div class="wf-desc">أرشفة تلقائية بعد 90 يوم<br>أو يدوياً بواسطة المسؤول</div>
+                    </div>
+                </div>
+                <div class="workflow-features">
+                    <div class="wf-feature">
+                        <i class="bi bi-hash"></i>
+                        <span>رقم مرجعي تسلسلي: HB-202604-00001</span>
+                    </div>
+                    <div class="wf-feature">
+                        <i class="bi bi-clock-history"></i>
+                        <span>تسجيل كل تغيير حالة في سجل التاريخ</span>
+                    </div>
+                    <div class="wf-feature">
+                        <i class="bi bi-bell"></i>
+                        <span>إشعار فوري لكل المعنيين عند كل تغيير</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 4: Dashboard -->
+        <section class="slide" id="slide-4">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">04</span>
+                    <h2 class="slide-title">لوحة التحكم التفاعلية</h2>
+                    <p class="slide-subtitle">نظرة شاملة على أداء العمليات في الوقت الفعلي</p>
+                </div>
+                <div class="dashboard-preview">
+                    <div class="dash-stats-row">
+                        <div class="dash-stat-card">
+                            <div class="dash-stat-icon" style="background: linear-gradient(135deg, #003d7a, #0066cc)"><i class="bi bi-file-earmark-text"></i></div>
+                            <div class="dash-stat-info">
+                                <span class="dash-stat-value" data-count="1,247">0</span>
+                                <span class="dash-stat-label">إجمالي المعاملات</span>
+                            </div>
+                        </div>
+                        <div class="dash-stat-card">
+                            <div class="dash-stat-icon" style="background: linear-gradient(135deg, #198754, #20c997)"><i class="bi bi-calendar-check"></i></div>
+                            <div class="dash-stat-info">
+                                <span class="dash-stat-value" data-count="23">0</span>
+                                <span class="dash-stat-label">معاملات اليوم</span>
+                            </div>
+                        </div>
+                        <div class="dash-stat-card">
+                            <div class="dash-stat-icon" style="background: linear-gradient(135deg, #ffc107, #fd7e14)"><i class="bi bi-hourglass-split"></i></div>
+                            <div class="dash-stat-info">
+                                <span class="dash-stat-value" data-count="58">0</span>
+                                <span class="dash-stat-label">في انتظار الاستلام</span>
+                            </div>
+                        </div>
+                        <div class="dash-stat-card">
+                            <div class="dash-stat-icon" style="background: linear-gradient(135deg, #dc3545, #e74c6f)"><i class="bi bi-exclamation-diamond"></i></div>
+                            <div class="dash-stat-info">
+                                <span class="dash-stat-value" data-count="7">0</span>
+                                <span class="dash-stat-label">معاملات عاجلة</span>
+                            </div>
+                        </div>
+                        <div class="dash-stat-card">
+                            <div class="dash-stat-icon" style="background: linear-gradient(135deg, #6f42c1, #a855f7)"><i class="bi bi-alarm"></i></div>
+                            <div class="dash-stat-info">
+                                <span class="dash-stat-value" data-count="3">0</span>
+                                <span class="dash-stat-label">متأخرة</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dash-charts-row">
+                        <div class="dash-chart-card">
+                            <h4><i class="bi bi-bar-chart-line"></i> النشاط الأسبوعي</h4>
+                            <div class="mini-bar-chart">
+                                <div class="bar-group"><div class="bar" style="height: 60%"></div><span>سبت</span></div>
+                                <div class="bar-group"><div class="bar" style="height: 85%"></div><span>أحد</span></div>
+                                <div class="bar-group"><div class="bar" style="height: 70%"></div><span>اثنين</span></div>
+                                <div class="bar-group"><div class="bar" style="height: 95%"></div><span>ثلاثاء</span></div>
+                                <div class="bar-group"><div class="bar" style="height: 45%"></div><span>أربعاء</span></div>
+                                <div class="bar-group"><div class="bar highlight" style="height: 75%"></div><span>خميس</span></div>
+                            </div>
+                        </div>
+                        <div class="dash-chart-card">
+                            <h4><i class="bi bi-pie-chart"></i> توزيع الحالات</h4>
+                            <div class="status-distribution">
+                                <div class="status-bar-item">
+                                    <div class="status-bar-header">
+                                        <span>مُستلمة</span><span>68%</span>
+                                    </div>
+                                    <div class="status-bar"><div class="status-fill received" style="width: 68%"></div></div>
+                                </div>
+                                <div class="status-bar-item">
+                                    <div class="status-bar-header">
+                                        <span>في الانتظار</span><span>22%</span>
+                                    </div>
+                                    <div class="status-bar"><div class="status-fill pending" style="width: 22%"></div></div>
+                                </div>
+                                <div class="status-bar-item">
+                                    <div class="status-bar-header">
+                                        <span>مرفوضة</span><span>7%</span>
+                                    </div>
+                                    <div class="status-bar"><div class="status-fill rejected" style="width: 7%"></div></div>
+                                </div>
+                                <div class="status-bar-item">
+                                    <div class="status-bar-header">
+                                        <span>مؤرشفة</span><span>3%</span>
+                                    </div>
+                                    <div class="status-bar"><div class="status-fill archived" style="width: 3%"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 5: Transactions -->
+        <section class="slide" id="slide-5">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">05</span>
+                    <h2 class="slide-title">إدارة المعاملات</h2>
+                    <p class="slide-subtitle">إنشاء وتتبع وإدارة كاملة لجميع المعاملات</p>
+                </div>
+                <div class="features-grid three-col">
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-plus-square-dotted"></i></div>
+                        <h3>إنشاء المعاملة</h3>
+                        <p>نموذج ذكي لإنشاء المعاملات مع تحديد المستلم والنوع والأولوية وإرفاق المستندات</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-list-columns-reverse"></i></div>
+                        <h3>قائمة المعاملات</h3>
+                        <p>بحث متقدم وتصفية حسب الحالة والنوع والأولوية مع ترقيم صفحات ذكي</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-file-text"></i></div>
+                        <h3>تفاصيل المعاملة</h3>
+                        <p>عرض شامل يتضمن خط زمني للحالات ومستندات مرفقة وسجل كامل</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-diagram-3"></i></div>
+                        <h3>5 أنواع معاملات</h3>
+                        <ul class="feature-list">
+                            <li>تسليم مستندات</li>
+                            <li>تحويل نقدي</li>
+                            <li>داخلي بين الإدارات</li>
+                            <li>بين الفروع</li>
+                            <li>أخرى</li>
+                        </ul>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-flag"></i></div>
+                        <h3>3 مستويات أولوية</h3>
+                        <div class="priority-badges">
+                            <span class="priority-badge normal">عادي</span>
+                            <span class="priority-badge important">مهم</span>
+                            <span class="priority-badge urgent">عاجل</span>
+                        </div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-clock-history"></i></div>
+                        <h3>الخط الزمني</h3>
+                        <p>شريط تقدم مرئي يوضح مسار المعاملة من الإنشاء حتى الأرشفة مع تفاصيل كل خطوة</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 6: Security -->
+        <section class="slide slide-dark" id="slide-6">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">06</span>
+                    <h2 class="slide-title">الأمان بمستوى مصرفي</h2>
+                    <p class="slide-subtitle">طبقات متعددة من الحماية وفقاً لمعايير OWASP</p>
+                </div>
+                <div class="security-grid">
+                    <div class="security-card">
+                        <div class="security-icon"><i class="bi bi-shield-lock-fill"></i></div>
+                        <h3>المصادقة الثنائية (MFA)</h3>
+                        <p>دعم تطبيقات المصادقة (Google/Microsoft Authenticator) عبر TOTP</p>
+                    </div>
+                    <div class="security-card">
+                        <div class="security-icon"><i class="bi bi-key-fill"></i></div>
+                        <h3>سياسة كلمات المرور</h3>
+                        <p>12 حرف كحد أدنى، أحرف كبيرة وصغيرة، أرقام ورموز، انتهاء كل 90 يوم</p>
+                    </div>
+                    <div class="security-card">
+                        <div class="security-icon"><i class="bi bi-people-fill"></i></div>
+                        <h3>12 دور وصلاحية (RBAC)</h3>
+                        <p>تحكم دقيق بالوصول لكل مستخدم حسب دوره ومسؤولياته</p>
+                    </div>
+                    <div class="security-card">
+                        <div class="security-icon"><i class="bi bi-file-earmark-lock2"></i></div>
+                        <h3>أمان المستندات</h3>
+                        <p>فحص Magic Bytes للملفات، PDF فقط، SHA-256 checksum، حد 20MB</p>
+                    </div>
+                    <div class="security-card">
+                        <div class="security-icon"><i class="bi bi-journal-check"></i></div>
+                        <h3>سجل التدقيق الشامل</h3>
+                        <p>تسجيل كل عملية: من، متى، ماذا، القيم القديمة والجديدة، عنوان IP</p>
+                    </div>
+                    <div class="security-card">
+                        <div class="security-icon"><i class="bi bi-globe2"></i></div>
+                        <h3>Security Headers</h3>
+                        <div class="security-headers">
+                            <code>X-Content-Type-Options</code>
+                            <code>X-Frame-Options</code>
+                            <code>Content-Security-Policy</code>
+                            <code>Referrer-Policy</code>
+                            <code>Permissions-Policy</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 7: Documents -->
+        <section class="slide" id="slide-7">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">07</span>
+                    <h2 class="slide-title">إدارة المستندات</h2>
+                    <p class="slide-subtitle">رفع ومعاينة وتحميل مستندات PDF بأمان كامل</p>
+                </div>
+                <div class="doc-flow">
+                    <div class="doc-step">
+                        <div class="doc-step-num">1</div>
+                        <div class="doc-step-icon"><i class="bi bi-cloud-arrow-up"></i></div>
+                        <h3>رفع الملف</h3>
+                        <p>سحب وإفلات أو اختيار<br>Drag & Drop مع شريط تقدم</p>
+                    </div>
+                    <div class="doc-connector"></div>
+                    <div class="doc-step">
+                        <div class="doc-step-num">2</div>
+                        <div class="doc-step-icon"><i class="bi bi-shield-check"></i></div>
+                        <h3>التحقق الأمني</h3>
+                        <p>فحص الامتداد + MIME<br>+ Magic Bytes + الحجم</p>
+                    </div>
+                    <div class="doc-connector"></div>
+                    <div class="doc-step">
+                        <div class="doc-step-num">3</div>
+                        <div class="doc-step-icon"><i class="bi bi-file-zip"></i></div>
+                        <h3>الضغط</h3>
+                        <p>ضغط PDF بدون فقدان جودة<br>تقليل الحجم حتى 30%</p>
+                    </div>
+                    <div class="doc-connector"></div>
+                    <div class="doc-step">
+                        <div class="doc-step-num">4</div>
+                        <div class="doc-step-icon"><i class="bi bi-hdd"></i></div>
+                        <h3>التخزين</h3>
+                        <p>محلي أو Azure Blob<br>مع SHA-256 checksum</p>
+                    </div>
+                </div>
+                <div class="doc-features-row">
+                    <div class="doc-feature">
+                        <i class="bi bi-eye"></i>
+                        <span>معاينة PDF داخل المتصفح</span>
+                    </div>
+                    <div class="doc-feature">
+                        <i class="bi bi-download"></i>
+                        <span>تحميل مباشر</span>
+                    </div>
+                    <div class="doc-feature">
+                        <i class="bi bi-arrows-fullscreen"></i>
+                        <span>عرض ملء الشاشة</span>
+                    </div>
+                    <div class="doc-feature">
+                        <i class="bi bi-clock-history"></i>
+                        <span>إصدارات المستندات</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 8: Notifications -->
+        <section class="slide" id="slide-8">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">08</span>
+                    <h2 class="slide-title">الإشعارات الفورية</h2>
+                    <p class="slide-subtitle">SignalR — تنبيهات في الوقت الحقيقي لكل المعنيين</p>
+                </div>
+                <div class="notif-showcase">
+                    <div class="notif-types">
+                        <div class="notif-type-card">
+                            <div class="notif-type-icon" style="color: #198754"><i class="bi bi-plus-circle-fill"></i></div>
+                            <h4>معاملة جديدة</h4>
+                            <p>إشعار فوري للمستلم عند إنشاء معاملة جديدة موجهة إليه</p>
+                        </div>
+                        <div class="notif-type-card">
+                            <div class="notif-type-icon" style="color: #0d6efd"><i class="bi bi-arrow-repeat"></i></div>
+                            <h4>تغيير الحالة</h4>
+                            <p>إشعار لجميع الأطراف عند تأكيد الاستلام أو الرفض</p>
+                        </div>
+                        <div class="notif-type-card">
+                            <div class="notif-type-icon" style="color: #6f42c1"><i class="bi bi-paperclip"></i></div>
+                            <h4>رفع مستند</h4>
+                            <p>تنبيه عند إضافة مستند جديد إلى المعاملة</p>
+                        </div>
+                        <div class="notif-type-card">
+                            <div class="notif-type-icon" style="color: #dc3545"><i class="bi bi-alarm-fill"></i></div>
+                            <h4>معاملة متأخرة</h4>
+                            <p>تحذير تلقائي عند تجاوز موعد التسليم المحدد</p>
+                        </div>
+                        <div class="notif-type-card">
+                            <div class="notif-type-icon" style="color: #ffc107"><i class="bi bi-megaphone-fill"></i></div>
+                            <h4>تنبيه النظام</h4>
+                            <p>إشعارات إدارية وتحديثات النظام المهمة</p>
+                        </div>
+                    </div>
+                    <div class="notif-demo">
+                        <div class="notif-bell-wrapper">
+                            <i class="bi bi-bell-fill notif-bell-icon"></i>
+                            <span class="notif-bell-badge">3</span>
+                        </div>
+                        <div class="notif-dropdown-demo">
+                            <div class="notif-item-demo unread">
+                                <i class="bi bi-check-circle-fill" style="color: #198754"></i>
+                                <div>
+                                    <strong>تم استلام المعاملة HB-202604-00142</strong>
+                                    <small>منذ 2 دقيقة</small>
+                                </div>
+                            </div>
+                            <div class="notif-item-demo unread">
+                                <i class="bi bi-file-earmark-arrow-up" style="color: #0d6efd"></i>
+                                <div>
+                                    <strong>تم رفع مستند جديد</strong>
+                                    <small>منذ 15 دقيقة</small>
+                                </div>
+                            </div>
+                            <div class="notif-item-demo">
+                                <i class="bi bi-alarm" style="color: #dc3545"></i>
+                                <div>
+                                    <strong>المعاملة HB-202604-00098 متأخرة</strong>
+                                    <small>منذ ساعة</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 9: Reports -->
+        <section class="slide" id="slide-9">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">09</span>
+                    <h2 class="slide-title">التقارير والتحليلات</h2>
+                    <p class="slide-subtitle">بيانات تحليلية تفاعلية مع إمكانية التصدير</p>
+                </div>
+                <div class="reports-grid">
+                    <div class="report-card">
+                        <div class="report-header">
+                            <i class="bi bi-building"></i>
+                            <h3>تقرير الفروع</h3>
+                        </div>
+                        <div class="report-body">
+                            <div class="report-metric"><span class="report-metric-label">الصادر</span><span class="report-metric-value">345</span></div>
+                            <div class="report-metric"><span class="report-metric-label">الوارد</span><span class="report-metric-value">289</span></div>
+                            <div class="report-metric"><span class="report-metric-label">المعلق</span><span class="report-metric-value">56</span></div>
+                            <div class="report-metric"><span class="report-metric-label">المكتمل</span><span class="report-metric-value">523</span></div>
+                        </div>
+                        <div class="report-export">
+                            <span><i class="bi bi-file-earmark-excel"></i> Excel</span>
+                            <span><i class="bi bi-file-earmark-pdf"></i> PDF</span>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-header">
+                            <i class="bi bi-speedometer"></i>
+                            <h3>تقرير الأداء</h3>
+                        </div>
+                        <div class="report-body">
+                            <div class="report-metric"><span class="report-metric-label">متوسط الإنجاز</span><span class="report-metric-value">2.3 يوم</span></div>
+                            <div class="report-metric"><span class="report-metric-label">أسرع إنجاز</span><span class="report-metric-value">15 دقيقة</span></div>
+                            <div class="report-metric"><span class="report-metric-label">أبطأ إنجاز</span><span class="report-metric-value">12 يوم</span></div>
+                            <div class="report-metric"><span class="report-metric-label">نسبة النجاح</span><span class="report-metric-value">94.2%</span></div>
+                        </div>
+                        <div class="report-export">
+                            <span><i class="bi bi-file-earmark-excel"></i> Excel</span>
+                            <span><i class="bi bi-file-earmark-pdf"></i> PDF</span>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-header">
+                            <i class="bi bi-pie-chart-fill"></i>
+                            <h3>تقرير الأنواع</h3>
+                        </div>
+                        <div class="report-body type-report">
+                            <div class="type-bar"><div class="type-fill" style="width:40%; background:#003d7a"></div><span>تسليم مستندات <strong>40%</strong></span></div>
+                            <div class="type-bar"><div class="type-fill" style="width:25%; background:#d4af37"></div><span>تحويل نقدي <strong>25%</strong></span></div>
+                            <div class="type-bar"><div class="type-fill" style="width:20%; background:#198754"></div><span>داخلي <strong>20%</strong></span></div>
+                            <div class="type-bar"><div class="type-fill" style="width:15%; background:#6f42c1"></div><span>بين الفروع <strong>15%</strong></span></div>
+                        </div>
+                        <div class="report-export">
+                            <span><i class="bi bi-file-earmark-excel"></i> Excel</span>
+                            <span><i class="bi bi-file-earmark-pdf"></i> PDF</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 10: Admin & Management -->
+        <section class="slide" id="slide-10">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">10</span>
+                    <h2 class="slide-title">الإدارة والإعدادات</h2>
+                    <p class="slide-subtitle">تحكم كامل في النظام من لوحة إدارة مركزية</p>
+                </div>
+                <div class="admin-grid">
+                    <div class="admin-card">
+                        <div class="admin-icon"><i class="bi bi-people"></i></div>
+                        <h3>إدارة المستخدمين</h3>
+                        <p>إنشاء وتعديل وتفعيل/تعطيل المستخدمين، تعيين الأدوار والفروع</p>
+                        <div class="admin-stat"><span>32</span> مستخدم</div>
+                    </div>
+                    <div class="admin-card">
+                        <div class="admin-icon"><i class="bi bi-building"></i></div>
+                        <h3>إدارة الفروع</h3>
+                        <p>4 أنواع فروع: مركز رئيسي، فرع رئيسي، فرع، مكتب</p>
+                        <div class="admin-stat"><span>14</span> فرع</div>
+                    </div>
+                    <div class="admin-card">
+                        <div class="admin-icon"><i class="bi bi-diagram-2"></i></div>
+                        <h3>إدارة الإدارات</h3>
+                        <p>هيكل تنظيمي هرمي مع دعم الإدارات الفرعية</p>
+                        <div class="admin-stat"><span>15</span> إدارة</div>
+                    </div>
+                    <div class="admin-card">
+                        <div class="admin-icon"><i class="bi bi-gear"></i></div>
+                        <h3>إعدادات النظام</h3>
+                        <p>12 إعداد في 6 فئات: أرشفة، معاملات، إشعارات، تدقيق، أمان، عام</p>
+                        <div class="admin-stat"><span>12</span> إعداد</div>
+                    </div>
+                    <div class="admin-card">
+                        <div class="admin-icon"><i class="bi bi-archive"></i></div>
+                        <h3>الأرشيف</h3>
+                        <p>أرشفة تلقائية كل 90 يوم أو يدوية، مع إمكانية البحث والاستعادة</p>
+                        <div class="admin-stat"><i class="bi bi-robot"></i> تلقائي</div>
+                    </div>
+                    <div class="admin-card">
+                        <div class="admin-icon"><i class="bi bi-journal-text"></i></div>
+                        <h3>سجل التدقيق</h3>
+                        <p>سجل شامل لكل العمليات مع بحث وتصفية متقدمة وإحصائيات</p>
+                        <div class="admin-stat"><i class="bi bi-infinity"></i> كل عملية</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 11: Roles Matrix -->
+        <section class="slide slide-dark" id="slide-11">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">11</span>
+                    <h2 class="slide-title">مصفوفة الأدوار والصلاحيات</h2>
+                    <p class="slide-subtitle">12 دوراً وظيفياً بصلاحيات دقيقة</p>
+                </div>
+                <div class="roles-table-wrapper">
+                    <table class="roles-table">
+                        <thead>
+                            <tr>
+                                <th>الدور</th>
+                                <th>المعاملات</th>
+                                <th>المستخدمين</th>
+                                <th>التقارير</th>
+                                <th>التدقيق</th>
+                                <th>الأرشيف</th>
+                                <th>الإعدادات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="role-name"><i class="bi bi-star-fill" style="color:#d4af37"></i> مدير النظام</td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                            </tr>
+                            <tr>
+                                <td class="role-name"><i class="bi bi-person-badge" style="color:#003d7a"></i> المدير العام</td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                            </tr>
+                            <tr>
+                                <td class="role-name"><i class="bi bi-person" style="color:#0d6efd"></i> مدير الفرع</td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                            </tr>
+                            <tr>
+                                <td class="role-name"><i class="bi bi-person" style="color:#198754"></i> مدير الإدارة</td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                            </tr>
+                            <tr>
+                                <td class="role-name"><i class="bi bi-person" style="color:#6f42c1"></i> الموظف</td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                            </tr>
+                            <tr>
+                                <td class="role-name"><i class="bi bi-search" style="color:#fd7e14"></i> المراقب / المدقق</td>
+                                <td><i class="bi bi-eye yes"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                                <td><i class="bi bi-dash-circle muted"></i></td>
+                            </tr>
+                            <tr>
+                                <td class="role-name"><i class="bi bi-pc-display" style="color:#dc3545"></i> مسؤول IT</td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                                <td><i class="bi bi-check-circle-fill yes"></i></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 12: Tech Stack -->
+        <section class="slide" id="slide-12">
+            <div class="slide-inner">
+                <div class="slide-header">
+                    <span class="slide-number">12</span>
+                    <h2 class="slide-title">البنية التقنية</h2>
+                    <p class="slide-subtitle">أحدث التقنيات المايكروسوفت لضمان الأداء والاستقرار</p>
+                </div>
+                <div class="tech-showcase">
+                    <div class="tech-category">
+                        <h3><i class="bi bi-layers"></i> المنصة الأساسية</h3>
+                        <div class="tech-items">
+                            <div class="tech-item">
+                                <div class="tech-badge">.NET 10</div>
+                                <span>إطار العمل الرئيسي</span>
+                            </div>
+                            <div class="tech-item">
+                                <div class="tech-badge">Blazor Server</div>
+                                <span>واجهة تفاعلية</span>
+                            </div>
+                            <div class="tech-item">
+                                <div class="tech-badge">EF Core 10</div>
+                                <span>قاعدة البيانات</span>
+                            </div>
+                            <div class="tech-item">
+                                <div class="tech-badge">SQL Server</div>
+                                <span>تخزين البيانات</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tech-category">
+                        <h3><i class="bi bi-puzzle"></i> المكتبات المتخصصة</h3>
+                        <div class="tech-items">
+                            <div class="tech-item">
+                                <div class="tech-badge blue">MediatR</div>
+                                <span>CQRS Pattern</span>
+                            </div>
+                            <div class="tech-item">
+                                <div class="tech-badge blue">SignalR</div>
+                                <span>Real-time</span>
+                            </div>
+                            <div class="tech-item">
+                                <div class="tech-badge blue">ClosedXML</div>
+                                <span>تصدير Excel</span>
+                            </div>
+                            <div class="tech-item">
+                                <div class="tech-badge blue">QuestPDF</div>
+                                <span>تصدير PDF</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tech-category">
+                        <h3><i class="bi bi-shield-shaded"></i> الأمان والبنية التحتية</h3>
+                        <div class="tech-items">
+                            <div class="tech-item">
+                                <div class="tech-badge green">ASP.NET Identity</div>
+                                <span>المصادقة والتفويض</span>
+                            </div>
+                            <div class="tech-item">
+                                <div class="tech-badge green">Serilog</div>
+                                <span>تسجيل مُهيكل</span>
+                            </div>
+                            <div class="tech-item">
+                                <div class="tech-badge green">Azure Blob</div>
+                                <span>تخزين سحابي (اختياري)</span>
+                            </div>
+                            <div class="tech-item">
+                                <div class="tech-badge green">FluentValidation</div>
+                                <span>التحقق من المدخلات</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 13: Conclusion -->
+        <section class="slide slide-conclusion" id="slide-13">
+            <div class="cover-bg-pattern"></div>
+            <div class="slide-inner">
+                <div class="conclusion-content">
+                    <div class="conclusion-icon">
+                        <i class="bi bi-rocket-takeoff"></i>
+                    </div>
+                    <h2 class="conclusion-title">جاهز للاعتماد</h2>
+                    <p class="conclusion-desc">
+                        نظام HBOperations حل رقمي متكامل يُمكّن بنك حضرموت من إدارة عمليات الاستلام والتسليم 
+                        بكفاءة عالية وأمان مصرفي، مع تتبع كامل لكل معاملة وإشعارات فورية وتقارير تحليلية.
+                    </p>
+                    <div class="conclusion-stats">
+                        <div class="conclusion-stat">
+                            <span class="conclusion-stat-value">15</span>
+                            <span class="conclusion-stat-label">صفحة تفاعلية</span>
+                        </div>
+                        <div class="conclusion-stat">
+                            <span class="conclusion-stat-value">12</span>
+                            <span class="conclusion-stat-label">دور وصلاحية</span>
+                        </div>
+                        <div class="conclusion-stat">
+                            <span class="conclusion-stat-value">14</span>
+                            <span class="conclusion-stat-label">فرع مُعرَّف</span>
+                        </div>
+                        <div class="conclusion-stat">
+                            <span class="conclusion-stat-value">6</span>
+                            <span class="conclusion-stat-label">طبقات أمان</span>
+                        </div>
+                    </div>
+                    <div class="conclusion-highlights">
+                        <div class="highlight-item"><i class="bi bi-check2-all"></i> متوافق مع الأجهزة المحمولة (Responsive)</div>
+                        <div class="highlight-item"><i class="bi bi-check2-all"></i> دعم كامل للغة العربية (RTL)</div>
+                        <div class="highlight-item"><i class="bi bi-check2-all"></i> إشعارات فورية في الوقت الحقيقي</div>
+                        <div class="highlight-item"><i class="bi bi-check2-all"></i> أرشفة تلقائية ذكية</div>
+                        <div class="highlight-item"><i class="bi bi-check2-all"></i> قابل للنشر على Azure أو سيرفر محلي</div>
+                    </div>
+                    <div class="conclusion-cta">
+                        <div class="cover-logo-wrapper small">
+                            <img src="../src/HBOperations.Web/wwwroot/Images/aboutLogo-fDwVp-So.svg" alt="بنك حضرموت" class="cover-logo">
+                        </div>
+                        <p class="conclusion-bank">بنك حضرموت — شريكك المصرفي الموثوق</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

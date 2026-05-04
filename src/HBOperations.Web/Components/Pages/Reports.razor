@@ -217,11 +217,27 @@
             var userId = CurrentUser.UserId;
             var branchId = CurrentUser.BranchId;
             var deptId = CurrentUser.DepartmentId;
-            transactions = transactions.Where(t =>
-                t.CreatedByUserId == userId ||
-                t.SenderUserId == userId ||
-                (branchId.HasValue && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
-                t.ReceiverUserId == userId || (deptId.HasValue && t.SenderDepartmentId == deptId));
+            var isDeptManager = CurrentUser.IsInRole("DepartmentManager") || CurrentUser.IsInRole("DepartmentStaff");
+
+            if (isDeptManager && deptId.HasValue)
+            {
+                // DepartmentManager/Staff: see only transactions involving their department
+                transactions = transactions.Where(t =>
+                    t.CreatedByUserId == userId ||
+                    t.SenderUserId == userId ||
+                    t.ReceiverUserId == userId ||
+                    t.SenderDepartmentId == deptId ||
+                    t.ReceiverDepartmentId == deptId);
+            }
+            else
+            {
+                // BranchManager/Staff: see all transactions involving their branch
+                transactions = transactions.Where(t =>
+                    t.CreatedByUserId == userId ||
+                    t.SenderUserId == userId ||
+                    (branchId.HasValue && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
+                    t.ReceiverUserId == userId);
+            }
         }
 
         _totalCount = await transactions.CountAsync();
@@ -241,9 +257,9 @@
             BranchName = b.NameAr,
             Outgoing = txList.Count(t => t.SenderBranchId == b.Id),
             Incoming = txList.Count(t => t.ReceiverBranchId == b.Id),
-            Pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Sent),
+            Pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Sent || t.Status == TransactionStatus.InTransit)),
             Completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived)),
-            Cancelled = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Cancelled)
+            Cancelled = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Rejected)
         }).Where(r => r.Total > 0).ToList();
 
         // ── Performance Report ──

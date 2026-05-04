@@ -26,6 +26,13 @@ public class Transaction : BaseEntity, IHasTimestamps
     // الموظف الذي قام فعلياً بتأكيد الاستلام/الرفض
     public Guid? ReceivedByUserId { get; set; }
 
+    // الشؤون الإدارية — عند انتقال Sent → InTransit
+    public DateTime? PickedUpAt { get; set; }         // وقت استلام الشؤون من المرسل
+    public Guid? PickedUpByUserId { get; set; }       // موظف الشؤون الذي أكّد الاستلام
+    public string? AdminNote { get; set; }            // ملاحظة من الشؤون عند الاستلام
+    public bool IsSelfDelivery { get; set; } = true;  // هل المُوصِّل = موظف الشؤون المُؤكِّد؟
+    public string? CourierName { get; set; }           // اسم المُوصِّل (مطلوب إذا IsSelfDelivery = false)
+
     // الملاحظات التوثيقية لكل دور — كل واحدة لها معنى محدد
     // ملاحظة من المرسل عند إنشاء المعاملة (اختيارية)
     public string? SenderNote { get; set; }

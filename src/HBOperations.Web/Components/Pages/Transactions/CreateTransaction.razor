@@ -161,15 +161,26 @@
                         <label class="hb-form-label">
                             <i class="bi bi-paperclip"></i> المرفقات (اختياري)
                         </label>
-                        <div class="upload-dropzone @(_pendingFiles.Count > 0 ? "has-files" : "")">
+                        <div class="upload-dropzone @(_pendingFiles.Count > 0 ? "has-files" : "") @(_uploadingFile ? "is-uploading" : "")">
                             <InputFile OnChange="HandleFilesSelected"
                                        accept=".pdf"
-                                       class="upload-input" id="createTxUpload" />
+                                       class="upload-input" id="createTxUpload"
+                                       disabled="@_uploadingFile" />
                             <label for="createTxUpload" class="upload-dropzone-inner">
                                 <div class="upload-icon"><i class="bi bi-cloud-arrow-up"></i></div>
                                 <div class="upload-title">انقر لاختيار ملف PDF</div>
                                 <div class="upload-hint">PDF فقط — ملف واحد، حجم الملف حتى 5 ميجا</div>
                             </label>
+                            @if (_uploadingFile)
+                            {
+                                <div class="upload-loading-overlay">
+                                    <div class="upload-loading-content">
+                                        <div class="hb-spinner upload-spinner"></div>
+                                        <div class="upload-loading-title">جارٍ قراءة الملف...</div>
+                                        <div class="upload-loading-hint">يرجى الانتظار قليلاً</div>
+                                    </div>
+                                </div>
+                            }
                         </div>
 
                         @if (_pendingFiles.Count > 0)
@@ -234,6 +245,7 @@
     private string? _currentBranchName;
     private string? _currentDepartmentName;
     private bool _submitting;
+    private bool _uploadingFile;
     private Guid? _hqBranchId;
     private bool _isHqSelected;
     private readonly List<PendingFile> _pendingFiles = new();
@@ -245,6 +257,8 @@
 
     private async Task HandleFilesSelected(InputFileChangeEventArgs e)
     {
+        _uploadingFile = true;
+        StateHasChanged();
         try
         {
             Logger.LogInformation("HandleFilesSelected fired with {Count} file(s)", e.FileCount);
@@ -293,6 +307,11 @@
         {
             Logger.LogError(ex, "HandleFilesSelected outer failure");
             await SafeToast("فشل الرفع", $"تعذّر استلام الملف: {ex.Message}");
+        }
+        finally
+        {
+            _uploadingFile = false;
+            StateHasChanged();
         }
     }
 
@@ -466,15 +485,14 @@
                 return;
             }
 
-            if (_model.DueDate.HasValue && _model.DueDate.Value < DateTime.Now)
+            if (_model.DueDate.HasValue && _model.DueDate.Value.Date < AppTime.YemenNow.Date)
             {
                 await Toast.ShowErrorAsync("تاريخ الاستحقاق لا يمكن أن يكون في الماضي");
                 return;
             }
 
-            // وقت الإرسال الفعلي — يدخله المستخدم يدوياً (متى تم إرسال المعاملة فعلياً)
-            // نحفظه كما هو بدون تحويل timezone (السيرفر قد يكون في timezone مختلف)
-            var sentAtUtc = DateTime.SpecifyKind(_model.SentAt, DateTimeKind.Utc);
+            // وقت الإرسال الفعلي — يدخله المستخدم بتوقيت اليمن، نحوّله إلى UTC للتخزين
+            var sentAtUtc = AppTime.FromYemenToUtc(_model.SentAt);
 
             var receiverUserId = Guid.Parse(_model.ReceiverUserId!);
             var receiverUser = _receiverUsers.FirstOrDefault(u => u.Id == receiverUserId);
@@ -608,7 +626,15 @@
             {
                 var title = $"معاملة جديدة واردة — {transaction.ReferenceNumber}";
                 var message = $"معاملة جديدة من {_currentBranchName ?? "الإدارة"} بعنوان: {transaction.Subject}";
-                await NotificationService.NotifyUserAsync(receiverUserId, title, message, transaction.Id, NotificationType.TransactionCreated);
+                // إشعار الشؤون الإدارية (هم من يستلمون أولاً) — استبعاد المرسل إذا كان منهم
+                var adminDept = await DbContext.Departments.AsNoTracking()
+                    .FirstOrDefaultAsync(d => d.Code == "DEP-ADM");
+                if (adminDept != null)
+                {
+                    await NotificationService.NotifyDepartmentAsync(adminDept.Id, title, message,
+                        transaction.Id, NotificationType.TransactionCreated,
+                        excludeUserId: CurrentUser.UserId);
+                }
             }
             catch
             {
@@ -655,7 +681,7 @@
         public string? ReceiverDepartmentId { get; set; }
         public string? ReceiverUserId { get; set; }
         public DateTime? DueDate { get; set; }
-        public DateTime SentAt { get; set; } = DateTime.Now;
+        public DateTime SentAt { get; set; } = AppTime.YemenNow;
         public bool RequireReceiverDocument { get; set; }
         public string? SenderNote { get; set; }
     }

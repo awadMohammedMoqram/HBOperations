@@ -119,7 +119,7 @@
                                 }
                             </td>
                             <td class="date-cell">
-                                @(user.LastLoginAt?.ToString("yyyy/MM/dd HH:mm") ?? "لم يسجل دخول")
+                                @(user.LastLoginAt.HasValue ? AppTime.FormatYemen(user.LastLoginAt.Value) : "لم يسجل دخول")
                             </td>
                             <td>
                                 <div class="action-buttons">

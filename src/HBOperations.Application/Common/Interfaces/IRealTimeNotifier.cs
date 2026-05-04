@@ -7,4 +7,5 @@ public interface IRealTimeNotifier
 {
     Task SendToUserAsync(Guid userId, string title, string message, Guid? transactionId = null);
     Task SendToAllAsync(string title, string message, Guid? transactionId = null);
+    Task RefreshUserAsync(Guid userId);
 }

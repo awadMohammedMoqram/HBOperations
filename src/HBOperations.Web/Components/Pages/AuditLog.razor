@@ -98,8 +98,8 @@
                             <td>@index</td>
                             <td class="date-cell">
                                 <div class="date-time">
-                                    <span class="date">@log.Timestamp.ToString("yyyy/MM/dd")</span>
-                                    <span class="time">@log.Timestamp.ToString("HH:mm:ss")</span>
+                                    <span class="date">@AppTime.FormatYemen(log.Timestamp, "yyyy/MM/dd")</span>
+                                    <span class="time">@AppTime.FormatYemen(log.Timestamp, "HH:mm:ss")</span>
                                 </div>
                             </td>
                             <td class="user-cell">
@@ -144,7 +144,7 @@
 
         _availableActions = _logs.Select(l => l.Action).Distinct().OrderBy(a => a).ToList();
         _totalCount = _logs.Count;
-        _todayCount = _logs.Count(l => l.Timestamp.Date == DateTime.UtcNow.Date);
+        _todayCount = _logs.Count(l => AppTime.ToYemen(l.Timestamp).Date == AppTime.YemenNow.Date);
         _loading = false;
     }
 

@@ -1,5 +1,6 @@
 using HBOperations.Application;
 using HBOperations.Application.Common.Interfaces;
+using HBOperations.Domain.Common;
 using HBOperations.Domain.Entities;
 using HBOperations.Domain.Enums;
 using HBOperations.Infrastructure;
@@ -150,8 +151,8 @@ try
             return Results.Forbid();
 
         // Don't allow uploads on terminal statuses
-        if (transaction.Status is TransactionStatus.Cancelled or TransactionStatus.Archived)
-            return Results.BadRequest("لا يمكن إضافة مستندات لمعاملة ملغاة أو مؤرشفة");
+        if (transaction.Status == TransactionStatus.Archived)
+            return Results.BadRequest("لا يمكن إضافة مستندات لمعاملة مؤرشفة");
 
         // One file per user per transaction (sender or receiver each get exactly one slot).
         var uploaderId = Guid.Parse(userId);
@@ -279,8 +280,8 @@ try
             return Results.Forbid();
 
         // Don't allow deletion on terminal statuses
-        if (doc.Transaction.Status is TransactionStatus.Cancelled or TransactionStatus.Archived)
-            return Results.BadRequest("لا يمكن حذف مستندات من معاملة ملغاة أو مؤرشفة");
+        if (doc.Transaction.Status == TransactionStatus.Archived)
+            return Results.BadRequest("لا يمكن حذف مستندات من معاملة مؤرشفة");
 
         await storage.DeleteAsync(doc.StoragePath);
         db.TransactionDocuments.Remove(doc);
@@ -337,9 +338,9 @@ try
         {
             var outgoing = txList.Count(t => t.SenderBranchId == b.Id);
             var incoming = txList.Count(t => t.ReceiverBranchId == b.Id);
-            var pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Sent);
+            var pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Sent || t.Status == TransactionStatus.InTransit));
             var completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived));
-            var cancelled = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Cancelled);
+            var rejected = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Rejected);
             var total = outgoing + incoming;
             if (total == 0) continue;
 
@@ -349,7 +350,7 @@ try
             ws.Cell(row, 4).Value = total;
             ws.Cell(row, 5).Value = pending;
             ws.Cell(row, 6).Value = completed;
-            ws.Cell(row, 7).Value = cancelled;
+            ws.Cell(row, 7).Value = rejected;
             row++;
         }
 
@@ -363,7 +364,7 @@ try
 
         return Results.File(ms,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"تقرير_الفروع_{DateTime.Now:yyyy-MM-dd}.xlsx");
+            $"تقرير_الفروع_{AppTime.YemenNow:yyyy-MM-dd}.xlsx");
     }).RequireAuthorization(new Microsoft.AspNetCore.Authorization.AuthorizeAttribute
     {
         Roles = "SuperAdmin,CEO,AssistantCEO,DepartmentManager,BranchManager,Auditor,ComplianceOfficer,ITAdmin"
@@ -411,9 +412,9 @@ try
                 Outgoing = outgoing,
                 Incoming = incoming,
                 Total = total,
-                Pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Sent),
+                Pending = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Sent || t.Status == TransactionStatus.InTransit)),
                 Completed = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived)),
-                Cancelled = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Cancelled)
+                Cancelled = txList.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Rejected)
             };
         }).Where(x => x != null).ToList();
 
@@ -465,12 +466,12 @@ try
 
                 page.Footer().AlignCenter().Text(x =>
                 {
-                    x.Span($"تاريخ التقرير: {DateTime.Now:yyyy-MM-dd HH:mm}").FontSize(9);
+                    x.Span($"تاريخ التقرير: {AppTime.YemenNow:yyyy-MM-dd HH:mm}").FontSize(9);
                 });
             });
         }).GeneratePdf();
 
-        return Results.File(pdfBytes, "application/pdf", $"تقرير_الفروع_{DateTime.Now:yyyy-MM-dd}.pdf");
+        return Results.File(pdfBytes, "application/pdf", $"تقرير_الفروع_{AppTime.YemenNow:yyyy-MM-dd}.pdf");
     }).RequireAuthorization(new Microsoft.AspNetCore.Authorization.AuthorizeAttribute
     {
         Roles = "SuperAdmin,CEO,AssistantCEO,DepartmentManager,BranchManager,Auditor,ComplianceOfficer,ITAdmin"

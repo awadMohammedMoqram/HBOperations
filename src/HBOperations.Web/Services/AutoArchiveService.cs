@@ -47,7 +47,7 @@ public class AutoArchiveService(IServiceProvider serviceProvider, ILogger<AutoAr
 
         // Archive completed transactions older than cutoff
         var toArchive = await db.Transactions
-            .Where(t => (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Rejected || t.Status == TransactionStatus.Cancelled)
+            .Where(t => (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Rejected)
                         && t.CompletedAt.HasValue
                         && t.CompletedAt.Value < cutoffDate)
             .ToListAsync(ct);

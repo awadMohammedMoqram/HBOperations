@@ -15,6 +15,8 @@ public class TransactionConfiguration : IEntityTypeConfiguration<Transaction>
         builder.Property(t => t.SenderNote).HasMaxLength(1000);
         builder.Property(t => t.ReceiverNote).HasMaxLength(1000);
         builder.Property(t => t.RejectionNote).HasMaxLength(1000);
+        builder.Property(t => t.AdminNote).HasMaxLength(1000);
+        builder.Property(t => t.CourierName).HasMaxLength(200);
 
         builder.HasIndex(t => t.ReferenceNumber).IsUnique();
         builder.HasIndex(t => t.Status);

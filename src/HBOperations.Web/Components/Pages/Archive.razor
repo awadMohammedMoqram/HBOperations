@@ -127,7 +127,7 @@
                             <td><span class="type-badge">@GetTypeLabel(tx.Type)</span></td>
                             <td>@(tx.SenderBranch?.NameAr ?? "—")</td>
                             <td>@(tx.ReceiverBranch?.NameAr ?? "—")</td>
-                            <td>@(tx.CompletedAt?.ToString("yyyy/MM/dd") ?? "—")</td>
+                            <td>@(tx.CompletedAt.HasValue ? AppTime.FormatYemen(tx.CompletedAt.Value, "yyyy/MM/dd") : "—")</td>
                             <td>
                                 <div class="action-btns">
                                     <a href="/transactions/@tx.Id" class="action-btn" title="عرض التفاصيل">
@@ -230,7 +230,7 @@
 
         var cutoff = DateTime.UtcNow.AddDays(-_archiveDays);
         _readyToArchive = await DbContext.Transactions
-            .CountAsync(t => (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Rejected || t.Status == TransactionStatus.Cancelled)
+            .CountAsync(t => (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Rejected)
                             && t.CompletedAt.HasValue
                             && t.CompletedAt.Value < cutoff);
     }
@@ -266,7 +266,7 @@
         {
             var cutoff = DateTime.UtcNow.AddDays(-_archiveDays);
             var toArchive = await DbContext.Transactions
-                .Where(t => (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Rejected || t.Status == TransactionStatus.Cancelled)
+                .Where(t => (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Rejected)
                             && t.CompletedAt.HasValue && t.CompletedAt.Value < cutoff)
                 .ToListAsync();
 

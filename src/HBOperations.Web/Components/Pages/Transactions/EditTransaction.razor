@@ -239,8 +239,8 @@
         _model.Type = tx.Type;
         _model.Priority = tx.Priority;
         _model.DueDate = tx.DueDate;
-        _model.SentAt = tx.SentAt.ToLocalTime();
-        _model.ReceivedAt = tx.ReceivedAt?.ToLocalTime();
+        _model.SentAt = AppTime.ToYemen(tx.SentAt);
+        _model.ReceivedAt = AppTime.ToYemen(tx.ReceivedAt);
         _model.SenderNote = tx.SenderNote;
         _model.ReceiverNote = tx.ReceiverNote;
         _model.RequireReceiverDocument = tx.RequireReceiverDocument;
@@ -271,25 +271,15 @@
                 return;
             }
 
-            var sentAtUtc = DateTime.SpecifyKind(_model.SentAt, DateTimeKind.Local).ToUniversalTime();
-            if (sentAtUtc > DateTime.UtcNow.AddMinutes(5))
-            {
-                _errorMessage = "تاريخ الإرسال لا يمكن أن يكون في المستقبل";
-                return;
-            }
+            var sentAtUtc = AppTime.FromYemenToUtc(_model.SentAt);
 
             DateTime? receivedAtUtc = null;
             if (_model.ReceivedAt.HasValue)
             {
-                receivedAtUtc = DateTime.SpecifyKind(_model.ReceivedAt.Value, DateTimeKind.Local).ToUniversalTime();
+                receivedAtUtc = AppTime.FromYemenToUtc(_model.ReceivedAt.Value);
                 if (receivedAtUtc < sentAtUtc)
                 {
                     _errorMessage = "تاريخ الاستلام لا يمكن أن يكون قبل تاريخ الإرسال";
-                    return;
-                }
-                if (receivedAtUtc > DateTime.UtcNow.AddMinutes(5))
-                {
-                    _errorMessage = "تاريخ الاستلام لا يمكن أن يكون في المستقبل";
                     return;
                 }
             }
@@ -392,7 +382,7 @@
         public TransactionType Type { get; set; }
         public TransactionPriority Priority { get; set; }
         public DateTime? DueDate { get; set; }
-        public DateTime SentAt { get; set; } = DateTime.Now;
+        public DateTime SentAt { get; set; } = AppTime.YemenNow;
         public DateTime? ReceivedAt { get; set; }
         public string? SenderNote { get; set; }
         public string? ReceiverNote { get; set; }

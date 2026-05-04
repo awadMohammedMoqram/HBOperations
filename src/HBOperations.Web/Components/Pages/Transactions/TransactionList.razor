@@ -155,7 +155,7 @@
                                     @GetStatusLabel(t.Status)
                                 </span>
                             </td>
-                            <td data-label="التاريخ" class="date-cell">@t.CreatedAt.ToString("yyyy/MM/dd")</td>
+                            <td data-label="التاريخ" class="date-cell">@AppTime.FormatYemen(t.CreatedAt, "yyyy/MM/dd")</td>
                             <td data-label="إجراءات">
                                 <div class="action-buttons">
                                     <a href="/transactions/@t.Id" class="action-btn view" title="عرض التفاصيل">
@@ -164,8 +164,8 @@
                                     @{
                                         var isReceiverOnly = IsReceiverOnly(t);
                                         var isSender = IsSenderFor(t);
-                                        var canEdit = isSender && t.Status is not (TransactionStatus.Cancelled or TransactionStatus.Archived or TransactionStatus.Received or TransactionStatus.Rejected);
-                                        var canReject = isReceiverOnly && t.Status == TransactionStatus.Sent;
+                                        var canEdit = isSender && t.Status == TransactionStatus.Sent;
+                                        var canReject = isReceiverOnly && t.Status == TransactionStatus.InTransit;
                                     }
                                     @if (canEdit)
                                     {
@@ -348,12 +348,42 @@
             var userId = CurrentUser.UserId;
             var branchId = CurrentUser.BranchId;
             var deptId = CurrentUser.DepartmentId;
+            var isDeptManager = CurrentUser.IsInRole("DepartmentManager") || CurrentUser.IsInRole("DepartmentStaff");
 
-            query = query.Where(t =>
-                t.CreatedByUserId == userId ||
-                t.SenderUserId == userId ||
-                (branchId.HasValue && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
-                t.ReceiverUserId == userId || (deptId.HasValue && t.SenderDepartmentId == deptId));
+            // الشؤون الإدارية ترى كل المعاملات (Sent و InTransit) + معاملاتها
+            var adminDept = await DbContext.Departments.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Code == TransactionStateMachine.AdminAffairsDeptCode);
+            var isAdminAffairs = adminDept != null && deptId == adminDept.Id;
+
+            if (isAdminAffairs)
+            {
+                // الشؤون ترى: كل Sent/InTransit + المعاملات التي شاركت فيها
+                query = query.Where(t =>
+                    t.Status == TransactionStatus.Sent ||
+                    t.Status == TransactionStatus.InTransit ||
+                    t.CreatedByUserId == userId ||
+                    t.SenderUserId == userId ||
+                    t.PickedUpByUserId == userId);
+            }
+            else if (isDeptManager && deptId.HasValue)
+            {
+                // DepartmentManager/Staff: see only transactions involving their department
+                query = query.Where(t =>
+                    t.CreatedByUserId == userId ||
+                    t.SenderUserId == userId ||
+                    t.ReceiverUserId == userId ||
+                    t.SenderDepartmentId == deptId ||
+                    t.ReceiverDepartmentId == deptId);
+            }
+            else
+            {
+                // BranchManager/Staff: see all transactions involving their branch
+                query = query.Where(t =>
+                    t.CreatedByUserId == userId ||
+                    t.SenderUserId == userId ||
+                    (branchId.HasValue && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
+                    t.ReceiverUserId == userId);
+            }
         }
 
         _transactions = await query
@@ -362,7 +392,7 @@
 
         _totalCount = _transactions.Count;
         _pendingCount = _transactions.Count(t => t.Status == TransactionStatus.Sent);
-        _inTransitCount = _transactions.Count(t => t.Status == TransactionStatus.Sent);
+        _inTransitCount = _transactions.Count(t => t.Status == TransactionStatus.InTransit);
         _completedCount = _transactions.Count(t => t.Status is TransactionStatus.Received or TransactionStatus.Archived);
         _loading = false;
     }
@@ -433,10 +463,12 @@
                 .FirstOrDefaultAsync(t => t.Id == _rejectingTransaction.Id);
             if (tracked is null) { _rejectError = "المعاملة غير موجودة"; return; }
 
-            var result = StateMachine.TransitionTo(
-                tracked, TransactionStatus.Rejected,
-                CurrentUser.UserId, CurrentUser.BranchId, CurrentUser.DepartmentId, CurrentUser.Roles,
-                _rejectionNote.Trim());
+            var adminDept = await DbContext.Departments.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Code == TransactionStateMachine.AdminAffairsDeptCode);
+            var adminDeptId = adminDept?.Id ?? Guid.Empty;
+            var result = StateMachine.Reject(
+                tracked, CurrentUser.UserId, CurrentUser.BranchId, CurrentUser.DepartmentId,
+                adminDeptId, _rejectionNote.Trim());
             if (!result.IsSuccess) { _rejectError = result.Error; return; }
 
             await DbContext.SaveChangesAsync();
@@ -504,10 +536,10 @@
 
     private static string GetStatusLabel(TransactionStatus s) => s switch
     {
-        TransactionStatus.Sent => "بانتظار الاستلام",
+        TransactionStatus.Sent => "بانتظار الشؤون الإدارية",
+        TransactionStatus.InTransit => "قيد التوصيل",
         TransactionStatus.Received => "تم الاستلام",
         TransactionStatus.Rejected => "مرفوضة",
-        TransactionStatus.Cancelled => "ملغاة",
         TransactionStatus.Archived => "مؤرشفة",
         _ => s.ToString()
     };
@@ -533,9 +565,9 @@
     private static string GetStatusClass(TransactionStatus s) => s switch
     {
         TransactionStatus.Sent => "status-pending",
+        TransactionStatus.InTransit => "status-in-transit",
         TransactionStatus.Received => "status-confirmed",
         TransactionStatus.Rejected => "status-returned",
-        TransactionStatus.Cancelled => "status-cancelled",
         TransactionStatus.Archived => "status-archived",
         _ => ""
     };
@@ -543,9 +575,9 @@
     private static string GetStatusIcon(TransactionStatus s) => s switch
     {
         TransactionStatus.Sent => "bi bi-send",
+        TransactionStatus.InTransit => "bi bi-truck",
         TransactionStatus.Received => "bi bi-check-circle-fill",
         TransactionStatus.Rejected => "bi bi-x-octagon",
-        TransactionStatus.Cancelled => "bi bi-x-circle",
         TransactionStatus.Archived => "bi bi-archive",
         _ => "bi bi-circle"
     };
