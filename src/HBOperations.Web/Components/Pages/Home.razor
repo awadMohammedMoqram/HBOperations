@@ -99,36 +99,49 @@
                 <!-- Status Breakdown -->
                 <div class="status-breakdown-card hb-card">
                     <h3 class="card-title"><i class="bi bi-pie-chart-fill"></i> توزيع الحالات</h3>
-                    <div class="status-bars">
-                        @foreach (var item in _statusBreakdown.OrderByDescending(x => x.Value))
-                        {
-                            var percent = _totalTransactions > 0 ? (double)item.Value / _totalTransactions * 100 : 0;
-                            var barCls = GetStatusBarClass(item.Key);
-                            var tone   = GetStatusToneClass(item.Key);
-                            <div class="status-bar-item @tone">
-                                <div class="status-bar-header">
-                                    <span class="status-bar-label">
-                                        <span class="status-bar-icon-wrap"><i class="@GetStatusIconClass(item.Key)"></i></span>
-                                        @GetStatusLabel(item.Key)
-                                    </span>
-                                    <span class="status-bar-count">
-                                        @item.Value
-                                        <span class="status-bar-percent">(@percent.ToString("F0")%)</span>
-                                    </span>
-                                </div>
-                                <div class="status-bar-track">
-                                    <div class="status-bar-fill @barCls" style="width: @percent.ToString("F0")%"></div>
+                    @if (_totalTransactions > 0)
+                    {
+                        var completed = _statusBreakdown.Where(x => x.Key == TransactionStatus.Received || x.Key == TransactionStatus.Archived).Sum(x => x.Value);
+                        var pending = _statusBreakdown.Where(x => x.Key == TransactionStatus.Sent || x.Key == TransactionStatus.InTransit).Sum(x => x.Value);
+                        var rejected = _statusBreakdown.Where(x => x.Key == TransactionStatus.Rejected).Sum(x => x.Value);
+                        var ringTotal = _totalTransactions > 0 ? _totalTransactions : 1;
+                        var completedPct = (double)completed / ringTotal * 100;
+                        var pendingPct = (double)pending / ringTotal * 100;
+                        var rejectedPct = (double)rejected / ringTotal * 100;
+                        var completionRate = (double)completed / ringTotal * 100;
+                        <div class="status-ring-chart">
+                            <div class="ring-visual">
+                                <svg viewBox="0 0 36 36" class="ring-svg">
+                                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+                                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#2e7d32" stroke-width="3"
+                                            stroke-dasharray="@completedPct.ToString("F1") 100"
+                                            stroke-dashoffset="25" stroke-linecap="round"/>
+                                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e65100" stroke-width="3"
+                                            stroke-dasharray="@pendingPct.ToString("F1") 100"
+                                            stroke-dashoffset="@((25 - completedPct).ToString("F1"))" stroke-linecap="round"/>
+                                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#c62828" stroke-width="3"
+                                            stroke-dasharray="@rejectedPct.ToString("F1") 100"
+                                            stroke-dashoffset="@((25 - completedPct - pendingPct).ToString("F1"))" stroke-linecap="round"/>
+                                </svg>
+                                <div class="ring-center-text">
+                                    <span class="ring-pct">@completionRate.ToString("F0")%</span>
+                                    <span class="ring-sub">نسبة الإنجاز</span>
                                 </div>
                             </div>
-                        }
-                        @if (!_statusBreakdown.Any())
-                        {
-                            <div class="empty-status">
-                                <i class="bi bi-inbox"></i>
-                                <p>لا توجد معاملات بعد</p>
+                            <div class="ring-legend">
+                                <div class="legend-item"><span class="legend-dot" style="background:#2e7d32"></span> مستلمة (@completed)</div>
+                                <div class="legend-item"><span class="legend-dot" style="background:#e65100"></span> معلّقة (@pending)</div>
+                                <div class="legend-item"><span class="legend-dot" style="background:#c62828"></span> مرفوضة (@rejected)</div>
                             </div>
-                        }
-                    </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-status">
+                            <i class="bi bi-inbox"></i>
+                            <p>لا توجد معاملات بعد</p>
+                        </div>
+                    }
                 </div>
             </div>
         </div>

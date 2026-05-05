@@ -1,0 +1,639 @@
+@page "/reports"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
+@using HBOperations.Application.Common.Interfaces
+@using HBOperations.Application.Common.DTOs
+@using HBOperations.Domain.Enums
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+@inject ICurrentUserService CurrentUser
+@inject NavigationManager Navigation
+
+<PageTitle>التقارير - بنك حضرموت</PageTitle>
+
+<div class="hb-reports-page">
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="page-header-content">
+            <h1 class="page-title"><i class="bi bi-bar-chart-line-fill"></i> التقارير والإحصائيات</h1>
+            <p class="page-subtitle">@_roleDescription</p>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="loading-state">
+            <div class="hb-spinner"></div>
+            <p>جارٍ تحميل البيانات...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Filters Bar -->
+        <div class="filters-bar">
+            <div class="filters-row">
+                <div class="filter-group">
+                    <label class="filter-label"><i class="bi bi-calendar-range"></i> الفترة</label>
+                    <select class="filter-select" @bind="_selectedPeriod" @bind:after="ReloadData">
+                        <option value="week">هذا الأسبوع</option>
+                        <option value="month">هذا الشهر</option>
+                        <option value="quarter">آخر 3 أشهر</option>
+                        <option value="year">هذه السنة</option>
+                        <option value="all">الكل</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label"><i class="bi bi-funnel"></i> النوع</label>
+                    <select class="filter-select" @bind="_selectedType" @bind:after="ReloadData">
+                        <option value="">الكل</option>
+                        <option value="0">تسليم مستندات</option>
+                        <option value="1">تحويل نقدي</option>
+                        <option value="2">داخلي بين الإدارات</option>
+                        <option value="3">بين الفروع</option>
+                        <option value="4">أخرى</option>
+                    </select>
+                </div>
+
+                @if (_hasGlobalAccess)
+                {
+                    <div class="filter-group">
+                        <label class="filter-label"><i class="bi bi-building"></i> الفرع</label>
+                        <select class="filter-select" @bind="_selectedBranchId" @bind:after="ReloadData">
+                            <option value="">كل الفروع</option>
+                            @foreach (var b in _branches)
+                            {
+                                <option value="@b.Id">@b.NameAr</option>
+                            }
+                        </select>
+                    </div>
+                }
+            </div>
+
+            <div class="export-buttons">
+                <a href="@GetExportUrl("pdf")" target="_blank" class="export-btn export-btn-pdf">
+                    <i class="bi bi-file-earmark-pdf-fill"></i> تصدير PDF
+                </a>
+                <a href="@GetExportUrl("excel")" target="_blank" class="export-btn export-btn-excel">
+                    <i class="bi bi-file-earmark-spreadsheet-fill"></i> تصدير Excel
+                </a>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="summary-grid">
+            <div class="summary-card summary-total">
+                <div class="summary-icon"><i class="bi bi-archive-fill"></i></div>
+                <div class="summary-data">
+                    <span class="summary-number">@_summary.Total</span>
+                    <span class="summary-label">إجمالي المعاملات</span>
+                </div>
+            </div>
+            <div class="summary-card summary-completed">
+                <div class="summary-icon"><i class="bi bi-check-circle-fill"></i></div>
+                <div class="summary-data">
+                    <span class="summary-number">@_summary.Completed</span>
+                    <span class="summary-label">مستلمة</span>
+                </div>
+            </div>
+            <div class="summary-card summary-pending">
+                <div class="summary-icon"><i class="bi bi-hourglass-split"></i></div>
+                <div class="summary-data">
+                    <span class="summary-number">@_summary.Pending</span>
+                    <span class="summary-label">معلّقة</span>
+                </div>
+            </div>
+            <div class="summary-card summary-rejected">
+                <div class="summary-icon"><i class="bi bi-x-circle-fill"></i></div>
+                <div class="summary-data">
+                    <span class="summary-number">@_summary.Rejected</span>
+                    <span class="summary-label">مرفوضة</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="charts-row">
+            <!-- Activity Chart -->
+            <div class="hb-card chart-card">
+                <h3 class="card-section-title"><i class="bi bi-graph-up"></i> نشاط المعاملات</h3>
+                <div class="activity-chart">
+                    @{
+                        var maxVal = _activityData.Values.Any() ? _activityData.Values.Max() : 1;
+                    }
+                    @foreach (var item in _activityData)
+                    {
+                        var pct = maxVal > 0 ? (double)item.Value / maxVal * 100 : 0;
+                        <div class="activity-bar-col">
+                            <span class="activity-bar-value">@item.Value</span>
+                            <div class="activity-bar-track">
+                                <div class="activity-bar-fill" style="height: @pct.ToString("F0")%"></div>
+                            </div>
+                            <span class="activity-bar-label">@item.Key</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Status Distribution -->
+            <div class="hb-card chart-card">
+                <h3 class="card-section-title"><i class="bi bi-pie-chart-fill"></i> توزيع الحالات</h3>
+                <div class="status-ring-chart">
+                    <div class="ring-visual">
+                        @{
+                            var ringTotal = _summary.Total > 0 ? _summary.Total : 1;
+                            var completedPct = (double)_summary.Completed / ringTotal * 100;
+                            var pendingPct = (double)_summary.Pending / ringTotal * 100;
+                            var rejectedPct = (double)_summary.Rejected / ringTotal * 100;
+                        }
+                        <svg viewBox="0 0 36 36" class="ring-svg">
+                            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+                            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#2e7d32" stroke-width="3"
+                                    stroke-dasharray="@completedPct.ToString("F1") 100"
+                                    stroke-dashoffset="25" stroke-linecap="round"/>
+                            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e65100" stroke-width="3"
+                                    stroke-dasharray="@pendingPct.ToString("F1") 100"
+                                    stroke-dashoffset="@((25 - completedPct).ToString("F1"))" stroke-linecap="round"/>
+                            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#c62828" stroke-width="3"
+                                    stroke-dasharray="@rejectedPct.ToString("F1") 100"
+                                    stroke-dashoffset="@((25 - completedPct - pendingPct).ToString("F1"))" stroke-linecap="round"/>
+                        </svg>
+                        <div class="ring-center-text">
+                            <span class="ring-pct">@_summary.CompletionRate.ToString("F0")%</span>
+                            <span class="ring-sub">نسبة الإنجاز</span>
+                        </div>
+                    </div>
+                    <div class="ring-legend">
+                        <div class="legend-item"><span class="legend-dot" style="background:#2e7d32"></span> مستلمة (@_summary.Completed)</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#e65100"></span> معلّقة (@_summary.Pending)</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#c62828"></span> مرفوضة (@_summary.Rejected)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Type Distribution -->
+        <div class="hb-card">
+            <h3 class="card-section-title"><i class="bi bi-diagram-3-fill"></i> توزيع الأنواع</h3>
+            <div class="type-bars">
+                @{
+                    var maxType = _typeBreakdown.Values.Any() ? _typeBreakdown.Values.Max() : 1;
+                }
+                @foreach (var t in _typeBreakdown)
+                {
+                    var typePct = maxType > 0 ? (double)t.Value / maxType * 100 : 0;
+                    <div class="type-bar-row">
+                        <span class="type-bar-name">@GetTypeName(t.Key)</span>
+                        <div class="type-bar-track">
+                            <div class="type-bar-fill" style="width: @typePct.ToString("F0")%"></div>
+                        </div>
+                        <span class="type-bar-count">@t.Value</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        @if (_hasGlobalAccess && _branchReport.Any())
+        {
+            <div class="hb-card">
+                <h3 class="card-section-title"><i class="bi bi-table"></i> تقرير الفروع</h3>
+                <div class="report-table-wrapper">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>الفرع</th>
+                                <th>الصادرة</th>
+                                <th>الواردة</th>
+                                <th>الإجمالي</th>
+                                <th>معلّقة</th>
+                                <th>مستلمة</th>
+                                <th>مرفوضة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in _branchReport)
+                            {
+                                <tr>
+                                    <td class="cell-name">@r.BranchName</td>
+                                    <td>@r.Outgoing</td>
+                                    <td>@r.Incoming</td>
+                                    <td class="cell-bold">@r.Total</td>
+                                    <td class="cell-warning">@r.Pending</td>
+                                    <td class="cell-success">@r.Completed</td>
+                                    <td class="cell-danger">@r.Rejected</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td class="cell-bold">المجموع</td>
+                                <td class="cell-bold">@_branchReport.Sum(r => r.Outgoing)</td>
+                                <td class="cell-bold">@_branchReport.Sum(r => r.Incoming)</td>
+                                <td class="cell-bold">@_branchReport.Sum(r => r.Total)</td>
+                                <td class="cell-bold">@_branchReport.Sum(r => r.Pending)</td>
+                                <td class="cell-bold">@_branchReport.Sum(r => r.Completed)</td>
+                                <td class="cell-bold">@_branchReport.Sum(r => r.Rejected)</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        }
+
+        @if (_hasGlobalAccess && _departmentReport.Any())
+        {
+            <div class="hb-card">
+                <h3 class="card-section-title"><i class="bi bi-building"></i> تقرير الإدارات</h3>
+                <div class="report-table-wrapper">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>الإدارة</th>
+                                <th>الصادرة</th>
+                                <th>الواردة</th>
+                                <th>الإجمالي</th>
+                                <th>معلّقة</th>
+                                <th>مستلمة</th>
+                                <th>مرفوضة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in _departmentReport)
+                            {
+                                <tr>
+                                    <td class="cell-name">@r.DepartmentName</td>
+                                    <td>@r.Outgoing</td>
+                                    <td>@r.Incoming</td>
+                                    <td class="cell-bold">@r.Total</td>
+                                    <td class="cell-warning">@r.Pending</td>
+                                    <td class="cell-success">@r.Completed</td>
+                                    <td class="cell-danger">@r.Rejected</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        @if (_isAdminAffairs && _adminAffairsReport.Any())
+        {
+            <div class="hb-card">
+                <h3 class="card-section-title"><i class="bi bi-truck"></i> تقرير الشؤون الإدارية</h3>
+                <div class="report-table-wrapper">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>الموظف</th>
+                                <th>تم الاستلام</th>
+                                <th>تم التسليم</th>
+                                <th>معلّقة</th>
+                                <th>متوسط التوصيل (ساعة)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in _adminAffairsReport)
+                            {
+                                <tr>
+                                    <td class="cell-name">@r.HandlerName</td>
+                                    <td>@r.PickedUp</td>
+                                    <td class="cell-success">@r.Delivered</td>
+                                    <td class="cell-warning">@r.Pending</td>
+                                    <td>@(r.AvgDeliveryHours > 0 ? r.AvgDeliveryHours.ToString("F1") : "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <!-- Performance KPIs -->
+        @if (_summary.Total > 0)
+        {
+            <div class="hb-card">
+                <h3 class="card-section-title"><i class="bi bi-speedometer2"></i> مؤشرات الأداء</h3>
+                <div class="kpi-grid">
+                    <div class="kpi-item">
+                        <div class="kpi-value">@(_summary.CompletionRate.ToString("F0"))%</div>
+                        <div class="kpi-label">نسبة الإنجاز</div>
+                        <div class="kpi-bar"><div class="kpi-bar-fill kpi-fill-success" style="width: @_summary.CompletionRate.ToString("F0")%"></div></div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-value">@(_summary.AvgProcessingHours > 0 ? _summary.AvgProcessingHours.ToString("F1") : "—")</div>
+                        <div class="kpi-label">متوسط وقت المعالجة (ساعة)</div>
+                        <div class="kpi-bar"><div class="kpi-bar-fill kpi-fill-blue" style="width: @(Math.Min(_summary.AvgProcessingHours / 72 * 100, 100).ToString("F0"))%"></div></div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-value">@_summary.Pending</div>
+                        <div class="kpi-label">معاملات بحاجة إلى إجراء</div>
+                        <div class="kpi-bar"><div class="kpi-bar-fill kpi-fill-warning" style="width: @(_summary.Total > 0 ? ((double)_summary.Pending / _summary.Total * 100).ToString("F0") : "0")%"></div></div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private bool _hasGlobalAccess;
+    private bool _isAdminAffairs;
+    private string _roleDescription = "";
+    private string _selectedPeriod = "month";
+    private string _selectedType = "";
+    private string _selectedBranchId = "";
+
+    private ReportSummary _summary = new();
+    private Dictionary<string, int> _activityData = [];
+    private Dictionary<TransactionType, int> _typeBreakdown = [];
+    private List<BranchReportRow> _branchReport = [];
+    private List<DepartmentReportRow> _departmentReport = [];
+    private List<AdminAffairsReportRow> _adminAffairsReport = [];
+    private List<(Guid Id, string NameAr)> _branches = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branches = await DbContext.Branches.AsNoTracking()
+            .Where(b => b.IsActive).OrderBy(b => b.NameAr)
+            .Select(b => new ValueTuple<Guid, string>(b.Id, b.NameAr))
+            .ToListAsync();
+
+        await LoadData();
+    }
+
+    private async Task ReloadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        await LoadData();
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadData()
+    {
+        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin", "AssistantCEO", "Auditor", "ComplianceOfficer", "ShariahAuditor" };
+        _hasGlobalAccess = globalRoles.Any(r => CurrentUser.IsInRole(r));
+
+        // Check admin affairs
+        _isAdminAffairs = false;
+        if (CurrentUser.DepartmentId.HasValue)
+        {
+            _isAdminAffairs = await DbContext.Departments.AsNoTracking()
+                .AnyAsync(d => d.Id == CurrentUser.DepartmentId.Value && d.Code == "DEP-ADM");
+        }
+
+        SetRoleDescription();
+
+        // Build base query
+        IQueryable<HBOperations.Domain.Entities.Transaction> query = DbContext.Transactions.AsNoTracking();
+
+        // Apply period filter
+        var (from, to) = GetDateRange();
+        if (from.HasValue) query = query.Where(t => t.CreatedAt >= from.Value);
+        if (to.HasValue) query = query.Where(t => t.CreatedAt <= to.Value);
+
+        // Apply type filter
+        if (!string.IsNullOrEmpty(_selectedType) && Enum.TryParse<TransactionType>(_selectedType, out var typeFilter))
+            query = query.Where(t => t.Type == typeFilter);
+
+        // Apply role-based filtering
+        if (!_hasGlobalAccess)
+        {
+            var userId = CurrentUser.UserId;
+            var branchId = CurrentUser.BranchId;
+            var deptId = CurrentUser.DepartmentId;
+
+            if (_isAdminAffairs)
+            {
+                query = query.Where(t =>
+                    t.Status == TransactionStatus.Sent ||
+                    t.Status == TransactionStatus.InTransit ||
+                    t.CreatedByUserId == userId ||
+                    t.SenderUserId == userId ||
+                    t.PickedUpByUserId == userId);
+            }
+            else if ((CurrentUser.IsInRole("DepartmentManager") || CurrentUser.IsInRole("DepartmentStaff")) && deptId.HasValue)
+            {
+                query = query.Where(t =>
+                    t.CreatedByUserId == userId || t.SenderUserId == userId ||
+                    t.ReceiverUserId == userId ||
+                    t.SenderDepartmentId == deptId || t.ReceiverDepartmentId == deptId);
+            }
+            else
+            {
+                query = query.Where(t =>
+                    t.CreatedByUserId == userId || t.SenderUserId == userId ||
+                    t.ReceiverUserId == userId ||
+                    (branchId.HasValue && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)));
+            }
+        }
+        else if (!string.IsNullOrEmpty(_selectedBranchId) && Guid.TryParse(_selectedBranchId, out var brFilter))
+        {
+            query = query.Where(t => t.SenderBranchId == brFilter || t.ReceiverBranchId == brFilter);
+        }
+
+        // Load data
+        var allTx = await query.Select(t => new
+        {
+            t.Id, t.Status, t.Type, t.CreatedAt, t.ReceivedAt, t.SentAt,
+            t.SenderBranchId, t.ReceiverBranchId,
+            t.SenderDepartmentId, t.ReceiverDepartmentId,
+            t.PickedUpByUserId, t.PickedUpAt
+        }).ToListAsync();
+
+        // Summary
+        _summary = new ReportSummary
+        {
+            Total = allTx.Count,
+            Completed = allTx.Count(t => t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived),
+            Pending = allTx.Count(t => t.Status == TransactionStatus.Sent || t.Status == TransactionStatus.InTransit),
+            Rejected = allTx.Count(t => t.Status == TransactionStatus.Rejected),
+        };
+
+        // Avg processing hours
+        var completedWithTime = allTx.Where(t => t.ReceivedAt.HasValue).ToList();
+        if (completedWithTime.Any())
+            _summary.AvgProcessingHours = completedWithTime.Average(t => (t.ReceivedAt!.Value - t.SentAt).TotalHours);
+
+        // Activity chart (by period label)
+        _activityData = BuildActivityChart(allTx.Select(t => t.CreatedAt).ToList());
+
+        // Type breakdown
+        _typeBreakdown = allTx.GroupBy(t => t.Type)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Branch report (global only)
+        if (_hasGlobalAccess)
+        {
+            var branchIds = _branches.Select(b => b.Id).ToHashSet();
+            _branchReport = _branches.Select(b =>
+            {
+                var outgoing = allTx.Count(t => t.SenderBranchId == b.Id);
+                var incoming = allTx.Count(t => t.ReceiverBranchId == b.Id);
+                var total = outgoing + incoming;
+                if (total == 0) return null;
+                return new BranchReportRow
+                {
+                    BranchName = b.NameAr,
+                    Outgoing = outgoing,
+                    Incoming = incoming,
+                    Total = total,
+                    Pending = allTx.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Sent || t.Status == TransactionStatus.InTransit)),
+                    Completed = allTx.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived)),
+                    Rejected = allTx.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Rejected)
+                };
+            }).Where(x => x != null).Cast<BranchReportRow>().ToList();
+
+            // Department report
+            var departments = await DbContext.Departments.AsNoTracking()
+                .Where(d => d.IsActive).OrderBy(d => d.NameAr)
+                .Select(d => new { d.Id, d.NameAr }).ToListAsync();
+
+            _departmentReport = departments.Select(d =>
+            {
+                var outgoing = allTx.Count(t => t.SenderDepartmentId == d.Id);
+                var incoming = allTx.Count(t => t.ReceiverDepartmentId == d.Id);
+                var total = outgoing + incoming;
+                if (total == 0) return null;
+                return new DepartmentReportRow
+                {
+                    DepartmentName = d.NameAr,
+                    Outgoing = outgoing,
+                    Incoming = incoming,
+                    Total = total,
+                    Pending = allTx.Count(t => (t.SenderDepartmentId == d.Id || t.ReceiverDepartmentId == d.Id) && (t.Status == TransactionStatus.Sent || t.Status == TransactionStatus.InTransit)),
+                    Completed = allTx.Count(t => (t.SenderDepartmentId == d.Id || t.ReceiverDepartmentId == d.Id) && (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived)),
+                    Rejected = allTx.Count(t => (t.SenderDepartmentId == d.Id || t.ReceiverDepartmentId == d.Id) && t.Status == TransactionStatus.Rejected)
+                };
+            }).Where(x => x != null).Cast<DepartmentReportRow>().ToList();
+        }
+
+        // Admin affairs report
+        if (_isAdminAffairs || _hasGlobalAccess)
+        {
+            var pickedUpTx = allTx.Where(t => t.PickedUpByUserId.HasValue).ToList();
+            var handlers = pickedUpTx.GroupBy(t => t.PickedUpByUserId!.Value).ToList();
+
+            // Get handler names
+            var handlerIds = handlers.Select(g => g.Key).ToList();
+            var handlerNames = await DbContext.Transactions.AsNoTracking()
+                .Where(t => t.PickedUpByUserId.HasValue && handlerIds.Contains(t.PickedUpByUserId.Value))
+                .Select(t => new { t.PickedUpByUserId, t.AdminNote })
+                .FirstOrDefaultAsync(); // Just to access the context
+
+            // We'll use a simplified approach since we don't have direct user access
+            _adminAffairsReport = handlers.Select(g =>
+            {
+                var picked = g.Count();
+                var delivered = g.Count(t => t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived);
+                var pending = g.Count(t => t.Status == TransactionStatus.InTransit);
+                var deliveredWithTime = g.Where(t => t.ReceivedAt.HasValue && t.PickedUpAt.HasValue).ToList();
+                var avgHrs = deliveredWithTime.Any()
+                    ? deliveredWithTime.Average(t => (t.ReceivedAt!.Value - t.PickedUpAt!.Value).TotalHours)
+                    : 0;
+
+                return new AdminAffairsReportRow
+                {
+                    HandlerName = $"موظف #{g.Key.ToString()[..8]}",
+                    PickedUp = picked,
+                    Delivered = delivered,
+                    Pending = pending,
+                    AvgDeliveryHours = avgHrs
+                };
+            }).ToList();
+        }
+
+        _loading = false;
+    }
+
+    private (DateTime? from, DateTime? to) GetDateRange()
+    {
+        var now = DateTime.UtcNow;
+        return _selectedPeriod switch
+        {
+            "week" => (now.AddDays(-7), now),
+            "month" => (new DateTime(now.Year, now.Month, 1), now),
+            "quarter" => (now.AddMonths(-3), now),
+            "year" => (new DateTime(now.Year, 1, 1), now),
+            _ => (null, null)
+        };
+    }
+
+    private Dictionary<string, int> BuildActivityChart(List<DateTime> dates)
+    {
+        var result = new Dictionary<string, int>();
+
+        if (_selectedPeriod == "week")
+        {
+            var dayNames = new[] { "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت" };
+            var today = DateTime.UtcNow.Date;
+            for (int i = 6; i >= 0; i--)
+            {
+                var d = today.AddDays(-i);
+                var name = dayNames[(int)d.DayOfWeek];
+                result[name] = dates.Count(x => x.Date == d);
+            }
+        }
+        else if (_selectedPeriod == "month")
+        {
+            var now = DateTime.UtcNow;
+            var start = new DateTime(now.Year, now.Month, 1);
+            var weeks = (int)Math.Ceiling((now.Day) / 7.0);
+            for (int w = 1; w <= weeks; w++)
+            {
+                var wStart = start.AddDays((w - 1) * 7);
+                var wEnd = start.AddDays(w * 7);
+                result[$"أسبوع {w}"] = dates.Count(d => d >= wStart && d < wEnd);
+            }
+        }
+        else
+        {
+            // Group by month
+            var grouped = dates.GroupBy(d => d.ToString("yyyy/MM")).OrderBy(g => g.Key);
+            foreach (var g in grouped.TakeLast(12))
+            {
+                result[g.Key] = g.Count();
+            }
+        }
+
+        return result;
+    }
+
+    private void SetRoleDescription()
+    {
+        if (_hasGlobalAccess)
+            _roleDescription = "عرض شامل لجميع المعاملات في النظام";
+        else if (_isAdminAffairs)
+            _roleDescription = "إحصائيات التوصيل والاستلام — إدارة الشؤون الإدارية";
+        else if (CurrentUser.IsInRole("DepartmentManager"))
+            _roleDescription = "إحصائيات إدارتك ومعاملات فريقك";
+        else if (CurrentUser.IsInRole("BranchManager") || CurrentUser.IsInRole("OfficeManager"))
+            _roleDescription = "إحصائيات فرعك ومعاملات موظفيك";
+        else
+            _roleDescription = "ملخص معاملاتك الشخصية";
+    }
+
+    private string GetExportUrl(string format)
+    {
+        var qs = $"?period={_selectedPeriod}";
+        if (!string.IsNullOrEmpty(_selectedType)) qs += $"&type={_selectedType}";
+        if (!string.IsNullOrEmpty(_selectedBranchId)) qs += $"&branchId={_selectedBranchId}";
+        return format == "pdf"
+            ? $"/api/reports/export-pdf{qs}"
+            : $"/api/reports/export-excel{qs}";
+    }
+
+    private static string GetTypeName(TransactionType t) => t switch
+    {
+        TransactionType.DocumentDelivery => "تسليم مستندات",
+        TransactionType.CashTransfer => "تحويل نقدي",
+        TransactionType.InternalDepartment => "داخلي بين الإدارات",
+        TransactionType.BranchToBranch => "بين الفروع",
+        TransactionType.Other => "أخرى",
+        _ => t.ToString()
+    };
+}
