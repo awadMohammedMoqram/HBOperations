@@ -1,6 +1,7 @@
 using HBOperations.Application;
 using HBOperations.Application.Common.DTOs;
 using HBOperations.Application.Common.Interfaces;
+using HBOperations.Application.Common.Reports;
 using HBOperations.Domain.Common;
 using HBOperations.Domain.Entities;
 using HBOperations.Domain.Enums;
@@ -290,31 +291,112 @@ try
     }).RequireAuthorization();
 
     // Export report to PDF
-    app.MapGet("/api/reports/export-pdf", async (IAppDbContext db, ICurrentUserService currentUser, PdfReportService pdfService, string? period, string? type, string? branchId) =>
+    app.MapGet("/api/reports/export-pdf", async (
+        IAppDbContext db,
+        ICurrentUserService currentUser,
+        PdfReportService pdfService,
+        IReportAccessPolicy accessPolicy,
+        IReportRateLimiter rateLimiter,
+        IReportSanitizer sanitizer,
+        IAuditService audit,
+        HttpContext http,
+        string? period, string? type, string? branchId, string? reportType) =>
     {
-        var (data, summary) = await BuildReportData(db, currentUser, period, type, branchId);
+        // 1) Rate limit
+        var userId = currentUser.UserId;
+        var roles = (currentUser.Roles ?? Array.Empty<string>()).ToList();
+        var rl = rateLimiter.CheckLimit(userId, roles);
+        if (!rl.IsAllowed)
+            return Results.Json(new { error = rl.Reason }, statusCode: 429);
+
+        // 2) Resolve report type — explicit (?reportType=) or default per scope
+        var scope = await accessPolicy.GetUserScopeAsync(currentUser, db);
+        ReportType selectedType;
+        if (!string.IsNullOrWhiteSpace(reportType) && Enum.TryParse<ReportType>(reportType, true, out var parsed))
+            selectedType = parsed;
+        else
+            selectedType = accessPolicy.GetDefaultReport(scope);
+
+        if (!accessPolicy.CanAccessReport(scope, selectedType))
+            return Results.Forbid();
+
         var reportDate = AppTime.YemenNow;
         var generatedBy = currentUser.FullName ?? "مستخدم النظام";
+        var ip = http.Connection.RemoteIpAddress?.ToString() ?? "—";
 
         byte[] pdfBytes;
         string fileName;
 
-        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin", "AssistantCEO", "Auditor", "ComplianceOfficer", "ShariahAuditor" };
-        var hasGlobalAccess = globalRoles.Any(r => currentUser.IsInRole(r));
+        switch (selectedType)
+        {
+            case ReportType.AuditTrail:
+            {
+                var auditRows = await BuildAuditTrailReport(db, currentUser, period, type, branchId);
+                auditRows = sanitizer.Sanitize(auditRows, scope); // Defense in depth
+                var auditSummary = SummarizeAuditTrail(auditRows);
+                pdfBytes = pdfService.GenerateAuditTrailReport(auditRows, auditSummary, generatedBy, reportDate);
+                fileName = $"تقرير_التدقيق_{reportDate:yyyy-MM-dd}.pdf";
+                break;
+            }
+            case ReportType.Personal:
+            {
+                var personalRows = await BuildPersonalReport(db, currentUser, period, type);
+                var personalSummary = SummarizePersonal(personalRows);
+                pdfBytes = pdfService.GeneratePersonalReport(personalRows, personalSummary, generatedBy, reportDate);
+                fileName = $"تقريري_الشخصي_{reportDate:yyyy-MM-dd}.pdf";
+                break;
+            }
+            case ReportType.ShariahCompliance:
+            {
+                // فلترة المعاملات النقدية فقط
+                var cashRows = await BuildAuditTrailReport(db, currentUser, period, ((int)TransactionType.CashTransfer).ToString(), branchId);
+                cashRows = sanitizer.Sanitize(cashRows, scope);
+                var cashSummary = SummarizeAuditTrail(cashRows);
+                pdfBytes = pdfService.GenerateShariahReport(cashRows, cashSummary, generatedBy, reportDate);
+                fileName = $"تقرير_الرقابة_الشرعية_{reportDate:yyyy-MM-dd}.pdf";
+                break;
+            }
+            case ReportType.RejectionAnalysis:
+            {
+                var (rejected, byTypeGrp, byBranchGrp, rejSummary) = await BuildRejectionAnalysis(db, currentUser, period, type, branchId);
+                pdfBytes = pdfService.GenerateRejectionAnalysisReport(rejected, byTypeGrp, byBranchGrp, rejSummary, generatedBy, reportDate);
+                fileName = $"تحليل_الرفض_{reportDate:yyyy-MM-dd}.pdf";
+                break;
+            }
+            case ReportType.Executive:
+            {
+                var execData = await BuildExecutiveReport(db, currentUser, period, type, branchId);
+                pdfBytes = pdfService.GenerateExecutiveReport(execData, generatedBy, reportDate);
+                fileName = $"التقرير_التنفيذي_{reportDate:yyyy-MM-dd}.pdf";
+                break;
+            }
+            default:
+            {
+                var (data, summary) = await BuildReportData(db, currentUser, period, type, branchId);
+                var branchReport = await BuildBranchReport(data, db);
+                pdfBytes = pdfService.GenerateBranchReport(branchReport, summary, generatedBy, reportDate);
+                fileName = scope.HasGlobalAccess
+                    ? $"تقرير_الفروع_{reportDate:yyyy-MM-dd}.pdf"
+                    : $"تقرير_المعاملات_{reportDate:yyyy-MM-dd}.pdf";
+                break;
+            }
+        }
 
-        if (hasGlobalAccess)
+        // 3) Record + audit
+        rateLimiter.RecordExport(userId);
+        await audit.LogAsync("Report", Guid.Empty, "Exported", null, new
         {
-            var branchReport = await BuildBranchReport(data, db);
-            pdfBytes = await pdfService.GenerateBranchReportAsync(branchReport, summary, generatedBy, reportDate);
-            fileName = $"تقرير_الفروع_{reportDate:yyyy-MM-dd}.pdf";
-        }
-        else
-        {
-            // Personal/department report as branch format
-            var branchReport = await BuildBranchReport(data, db);
-            pdfBytes = await pdfService.GenerateBranchReportAsync(branchReport, summary, generatedBy, reportDate);
-            fileName = $"تقرير_المعاملات_{reportDate:yyyy-MM-dd}.pdf";
-        }
+            ReportType = selectedType.ToString(),
+            Format = "Pdf",
+            Period = period,
+            Type = type,
+            BranchId = branchId,
+            UserName = currentUser.UserName,
+            FullName = generatedBy,
+            Ip = ip,
+            DailyCount = rl.CurrentDaily + 1,
+            DailyLimit = rl.DailyLimit
+        });
 
         return Results.File(pdfBytes, "application/pdf", fileName);
     }).RequireAuthorization(new Microsoft.AspNetCore.Authorization.AuthorizeAttribute
@@ -323,92 +405,133 @@ try
     });
 
     // Export report to Excel
-    app.MapGet("/api/reports/export-excel", async (IAppDbContext db, ICurrentUserService currentUser, string? period, string? type, string? branchId) =>
+    app.MapGet("/api/reports/export-excel", async (
+        IAppDbContext db,
+        ICurrentUserService currentUser,
+        IReportAccessPolicy accessPolicy,
+        IReportRateLimiter rateLimiter,
+        IReportSanitizer sanitizer,
+        IAuditService audit,
+        HttpContext http,
+        string? period, string? type, string? branchId, string? reportType) =>
     {
-        var (data, summary) = await BuildReportData(db, currentUser, period, type, branchId);
-        var reportDate = AppTime.YemenNow;
+        var userId = currentUser.UserId;
+        var roles = (currentUser.Roles ?? Array.Empty<string>()).ToList();
+        var rl = rateLimiter.CheckLimit(userId, roles);
+        if (!rl.IsAllowed)
+            return Results.Json(new { error = rl.Reason }, statusCode: 429);
 
-        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin", "AssistantCEO", "Auditor", "ComplianceOfficer", "ShariahAuditor" };
-        var hasGlobalAccess = globalRoles.Any(r => currentUser.IsInRole(r));
+        var scope = await accessPolicy.GetUserScopeAsync(currentUser, db);
+        ReportType selectedType;
+        if (!string.IsNullOrWhiteSpace(reportType) && Enum.TryParse<ReportType>(reportType, true, out var parsed))
+            selectedType = parsed;
+        else
+            selectedType = accessPolicy.GetDefaultReport(scope);
+
+        if (!accessPolicy.CanAccessReport(scope, selectedType))
+            return Results.Forbid();
+
+        var reportDate = AppTime.YemenNow;
+        var ip = http.Connection.RemoteIpAddress?.ToString() ?? "—";
+        var generatedBy = currentUser.FullName ?? "مستخدم النظام";
 
         using var workbook = new XLWorkbook();
+        string fileName;
 
-        // Sheet 1: Summary
-        var wsSummary = workbook.Worksheets.Add("الملخص");
-        wsSummary.RightToLeft = true;
-        wsSummary.Cell(1, 1).Value = "تقرير المعاملات — بنك حضرموت";
-        wsSummary.Cell(1, 1).Style.Font.Bold = true;
-        wsSummary.Cell(1, 1).Style.Font.FontSize = 14;
-        wsSummary.Cell(2, 1).Value = $"تاريخ التقرير: {reportDate:yyyy/MM/dd}";
-        wsSummary.Cell(3, 1).Value = $"أُعد بواسطة: {currentUser.FullName ?? "—"}";
-
-        wsSummary.Cell(5, 1).Value = "إجمالي المعاملات";
-        wsSummary.Cell(5, 2).Value = summary.Total;
-        wsSummary.Cell(6, 1).Value = "مستلمة";
-        wsSummary.Cell(6, 2).Value = summary.Completed;
-        wsSummary.Cell(7, 1).Value = "معلّقة";
-        wsSummary.Cell(7, 2).Value = summary.Pending;
-        wsSummary.Cell(8, 1).Value = "مرفوضة";
-        wsSummary.Cell(8, 2).Value = summary.Rejected;
-        wsSummary.Cell(9, 1).Value = "نسبة الإنجاز";
-        wsSummary.Cell(9, 2).Value = $"{summary.CompletionRate:F1}%";
-        wsSummary.Columns().AdjustToContents();
-
-        // Sheet 2: Branch Data
-        if (hasGlobalAccess)
+        switch (selectedType)
         {
-            var branchReport = await BuildBranchReport(data, db);
-            var ws = workbook.Worksheets.Add("تقرير الفروع");
-            ws.RightToLeft = true;
-
-            var headers = new[] { "الفرع", "الصادرة", "الواردة", "الإجمالي", "معلّقة", "مستلمة", "مرفوضة" };
-            for (int i = 0; i < headers.Length; i++)
+            case ReportType.AuditTrail:
             {
-                ws.Cell(1, i + 1).Value = headers[i];
-                ws.Cell(1, i + 1).Style.Font.Bold = true;
-                ws.Cell(1, i + 1).Style.Fill.BackgroundColor = XLColor.FromArgb(0, 61, 122);
-                ws.Cell(1, i + 1).Style.Font.FontColor = XLColor.White;
-                ws.Cell(1, i + 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                var rows = await BuildAuditTrailReport(db, currentUser, period, type, branchId);
+                rows = sanitizer.Sanitize(rows, scope);
+                var sum = SummarizeAuditTrail(rows);
+                ExcelHelpers.AddSummarySheet(workbook, "تقرير المراجعة", sum, generatedBy, reportDate);
+                ExcelHelpers.AddAuditTrailSheet(workbook, rows);
+                fileName = $"تقرير_التدقيق_{reportDate:yyyy-MM-dd}.xlsx";
+                break;
             }
-
-            int row = 2;
-            foreach (var r in branchReport)
+            case ReportType.Personal:
             {
-                ws.Cell(row, 1).Value = r.BranchName;
-                ws.Cell(row, 2).Value = r.Outgoing;
-                ws.Cell(row, 3).Value = r.Incoming;
-                ws.Cell(row, 4).Value = r.Total;
-                ws.Cell(row, 5).Value = r.Pending;
-                ws.Cell(row, 6).Value = r.Completed;
-                ws.Cell(row, 7).Value = r.Rejected;
-                row++;
+                var rows = await BuildPersonalReport(db, currentUser, period, type);
+                var sum = SummarizePersonal(rows);
+                ExcelHelpers.AddSummarySheet(workbook, "تقريري الشخصي", sum, generatedBy, reportDate);
+                ExcelHelpers.AddPersonalSheet(workbook, rows);
+                fileName = $"تقريري_الشخصي_{reportDate:yyyy-MM-dd}.xlsx";
+                break;
             }
-
-            // Total row
-            ws.Cell(row, 1).Value = "المجموع";
-            ws.Cell(row, 1).Style.Font.Bold = true;
-            ws.Cell(row, 2).Value = branchReport.Sum(r => r.Outgoing);
-            ws.Cell(row, 3).Value = branchReport.Sum(r => r.Incoming);
-            ws.Cell(row, 4).Value = branchReport.Sum(r => r.Total);
-            ws.Cell(row, 5).Value = branchReport.Sum(r => r.Pending);
-            ws.Cell(row, 6).Value = branchReport.Sum(r => r.Completed);
-            ws.Cell(row, 7).Value = branchReport.Sum(r => r.Rejected);
-            ws.Row(row).Style.Font.Bold = true;
-            ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromArgb(232, 244, 253);
-
-            ws.Columns().AdjustToContents();
-            ws.Range(1, 1, row, 7).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-            ws.Range(1, 1, row, 7).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
-            ws.SheetView.FreezeRows(1);
+            case ReportType.ShariahCompliance:
+            {
+                var rows = await BuildAuditTrailReport(db, currentUser, period, ((int)TransactionType.CashTransfer).ToString(), branchId);
+                rows = sanitizer.Sanitize(rows, scope);
+                var sum = SummarizeAuditTrail(rows);
+                ExcelHelpers.AddSummarySheet(workbook, "الرقابة الشرعية", sum, generatedBy, reportDate);
+                ExcelHelpers.AddAuditTrailSheet(workbook, rows, "المعاملات النقدية");
+                fileName = $"تقرير_الرقابة_الشرعية_{reportDate:yyyy-MM-dd}.xlsx";
+                break;
+            }
+            case ReportType.RejectionAnalysis:
+            {
+                var (rejected, byTypeGrp, byBranchGrp, sum) = await BuildRejectionAnalysis(db, currentUser, period, type, branchId);
+                ExcelHelpers.AddSummarySheet(workbook, "تحليل الرفض", sum, generatedBy, reportDate);
+                ExcelHelpers.AddRejectionGroupSheet(workbook, "حسب النوع", "نوع المعاملة", byTypeGrp);
+                ExcelHelpers.AddRejectionGroupSheet(workbook, "حسب الفرع", "الفرع", byBranchGrp);
+                ExcelHelpers.AddRejectionDetailsSheet(workbook, rejected);
+                fileName = $"تحليل_الرفض_{reportDate:yyyy-MM-dd}.xlsx";
+                break;
+            }
+            case ReportType.Executive:
+            {
+                var execData = await BuildExecutiveReport(db, currentUser, period, type, branchId);
+                ExcelHelpers.AddSummarySheet(workbook, "التقرير التنفيذي", execData.Summary, generatedBy, reportDate);
+                if (execData.Branches.Count > 0) ExcelHelpers.AddBranchesSheet(workbook, execData.Branches);
+                if (execData.Departments.Count > 0) ExcelHelpers.AddDepartmentsSheet(workbook, execData.Departments);
+                // تفاصيل المعاملات حسب نطاق المستخدم
+                var execTxRows = await BuildAuditTrailReport(db, currentUser, period, type, branchId);
+                execTxRows = sanitizer.Sanitize(execTxRows, scope);
+                if (execTxRows.Count > 0) ExcelHelpers.AddAuditTrailSheet(workbook, execTxRows, "المعاملات");
+                fileName = $"التقرير_التنفيذي_{reportDate:yyyy-MM-dd}.xlsx";
+                break;
+            }
+            default:
+            {
+                var (data, summary) = await BuildReportData(db, currentUser, period, type, branchId);
+                ExcelHelpers.AddSummarySheet(workbook, "تقرير المعاملات", summary, generatedBy, reportDate);
+                if (scope.HasGlobalAccess)
+                {
+                    var branchReport = await BuildBranchReport(data, db);
+                    ExcelHelpers.AddBranchesSheet(workbook, branchReport);
+                }
+                // تفاصيل المعاملات حسب نطاق المستخدم
+                var txRows = await BuildAuditTrailReport(db, currentUser, period, type, branchId);
+                txRows = sanitizer.Sanitize(txRows, scope);
+                if (txRows.Count > 0) ExcelHelpers.AddAuditTrailSheet(workbook, txRows, "المعاملات");
+                fileName = $"تقرير_المعاملات_{reportDate:yyyy-MM-dd}.xlsx";
+                break;
+            }
         }
 
         var ms = new MemoryStream();
         workbook.SaveAs(ms);
         ms.Position = 0;
 
+        rateLimiter.RecordExport(userId);
+        await audit.LogAsync("Report", Guid.Empty, "Exported", null, new
+        {
+            ReportType = selectedType.ToString(),
+            Format = "Excel",
+            Period = period,
+            Type = type,
+            BranchId = branchId,
+            UserName = currentUser.UserName,
+            FullName = currentUser.FullName,
+            Ip = ip,
+            DailyCount = rl.CurrentDaily + 1,
+            DailyLimit = rl.DailyLimit
+        });
+
         return Results.File(ms,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"تقرير_المعاملات_{reportDate:yyyy-MM-dd}.xlsx");
+            fileName);
     }).RequireAuthorization(new Microsoft.AspNetCore.Authorization.AuthorizeAttribute
     {
         Roles = "SuperAdmin,CEO,AssistantCEO,DepartmentManager,BranchManager,OfficeManager,Auditor,ComplianceOfficer,ShariahAuditor,ITAdmin,DepartmentStaff,BranchStaff"
@@ -547,6 +670,256 @@ static async Task<List<BranchReportRow>> BuildBranchReport(List<ReportTxData> da
             Rejected = data.Count(t => (t.SenderBranchId == b.Id || t.ReceiverBranchId == b.Id) && t.Status == TransactionStatus.Rejected)
         };
     }).Where(x => x != null).Cast<BranchReportRow>().ToList();
+}
+
+// ───────── Audit Trail Report (للمدققين) ─────────
+static async Task<List<AuditTrailReportRow>> BuildAuditTrailReport(
+    IAppDbContext db, ICurrentUserService currentUser, string? period, string? type, string? branchId)
+{
+    IQueryable<Transaction> query = db.Transactions.AsNoTracking();
+
+    var now = DateTime.UtcNow;
+    DateTime? from = period switch
+    {
+        "week" => now.AddDays(-7),
+        "month" => new DateTime(now.Year, now.Month, 1),
+        "quarter" => now.AddMonths(-3),
+        "year" => new DateTime(now.Year, 1, 1),
+        _ => null
+    };
+    if (from.HasValue) query = query.Where(t => t.CreatedAt >= from.Value);
+    if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, out var tFilter))
+        query = query.Where(t => t.Type == tFilter);
+    if (!string.IsNullOrEmpty(branchId) && Guid.TryParse(branchId, out var brFilter))
+        query = query.Where(t => t.SenderBranchId == brFilter || t.ReceiverBranchId == brFilter);
+
+    var rows = await query
+        .OrderByDescending(t => t.CreatedAt)
+        .Take(500) // Cap to avoid huge PDFs
+        .Select(t => new AuditTrailReportRow
+        {
+            ReferenceNumber = t.ReferenceNumber,
+            Subject = t.Subject,
+            Type = t.Type,
+            Status = t.Status,
+            Priority = t.Priority,
+            CreatedAt = t.CreatedAt,
+            SentAt = t.SentAt,
+            ReceivedAt = t.ReceivedAt,
+            RejectionNote = t.RejectionNote,
+            AdminNote = t.AdminNote,
+            SenderNote = t.SenderNote,
+            SenderBranch = t.SenderBranchId.HasValue
+                ? db.Branches.Where(b => b.Id == t.SenderBranchId).Select(b => b.NameAr).FirstOrDefault()
+                : null,
+            ReceiverBranch = t.ReceiverBranchId.HasValue
+                ? db.Branches.Where(b => b.Id == t.ReceiverBranchId).Select(b => b.NameAr).FirstOrDefault()
+                : null,
+        })
+        .ToListAsync();
+
+    return rows;
+}
+
+static ReportSummary SummarizeAuditTrail(List<AuditTrailReportRow> rows) => new()
+{
+    Total = rows.Count,
+    Completed = rows.Count(r => r.Status == TransactionStatus.Received || r.Status == TransactionStatus.Archived),
+    Pending = rows.Count(r => r.Status == TransactionStatus.Sent || r.Status == TransactionStatus.InTransit),
+    Rejected = rows.Count(r => r.Status == TransactionStatus.Rejected),
+};
+
+// ───────── Personal Report (للموظف) ─────────
+static async Task<List<PersonalReportRow>> BuildPersonalReport(
+    IAppDbContext db, ICurrentUserService currentUser, string? period, string? type)
+{
+    var userId = currentUser.UserId;
+    IQueryable<Transaction> query = db.Transactions.AsNoTracking()
+        .Where(t => t.CreatedByUserId == userId || t.SenderUserId == userId || t.ReceiverUserId == userId);
+
+    var now = DateTime.UtcNow;
+    DateTime? from = period switch
+    {
+        "week" => now.AddDays(-7),
+        "month" => new DateTime(now.Year, now.Month, 1),
+        "quarter" => now.AddMonths(-3),
+        "year" => new DateTime(now.Year, 1, 1),
+        _ => null
+    };
+    if (from.HasValue) query = query.Where(t => t.CreatedAt >= from.Value);
+    if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, out var tFilter))
+        query = query.Where(t => t.Type == tFilter);
+
+    var rows = await query.OrderByDescending(t => t.CreatedAt).Take(500)
+        .Select(t => new
+        {
+            t.ReferenceNumber,
+            t.Subject,
+            t.Type,
+            t.Status,
+            t.CreatedAt,
+            t.ReceivedAt,
+            IsOutgoing = t.SenderUserId == userId || t.CreatedByUserId == userId,
+            CounterBranch = (t.SenderUserId == userId || t.CreatedByUserId == userId)
+                ? (t.ReceiverBranchId.HasValue ? db.Branches.Where(b => b.Id == t.ReceiverBranchId).Select(b => b.NameAr).FirstOrDefault() : null)
+                : (t.SenderBranchId.HasValue ? db.Branches.Where(b => b.Id == t.SenderBranchId).Select(b => b.NameAr).FirstOrDefault() : null)
+        }).ToListAsync();
+
+    return rows.Select(r => new PersonalReportRow
+    {
+        ReferenceNumber = r.ReferenceNumber,
+        Subject = r.Subject,
+        Type = r.Type,
+        Status = r.Status,
+        CreatedAt = r.CreatedAt,
+        CompletedAt = r.ReceivedAt,
+        Direction = r.IsOutgoing ? "صادرة" : "واردة",
+        CounterpartName = r.CounterBranch
+    }).ToList();
+}
+
+static ReportSummary SummarizePersonal(List<PersonalReportRow> rows) => new()
+{
+    Total = rows.Count,
+    Completed = rows.Count(r => r.Status == TransactionStatus.Received || r.Status == TransactionStatus.Archived),
+    Pending = rows.Count(r => r.Status == TransactionStatus.Sent || r.Status == TransactionStatus.InTransit),
+    Rejected = rows.Count(r => r.Status == TransactionStatus.Rejected),
+};
+
+// ───────── Rejection Analysis (تحليل أسباب الرفض) ─────────
+static async Task<(List<RejectionAnalysisRow> rows, List<RejectionGroup> byType, List<RejectionGroup> byBranch, ReportSummary summary)>
+    BuildRejectionAnalysis(IAppDbContext db, ICurrentUserService currentUser, string? period, string? type, string? branchId)
+{
+    IQueryable<Transaction> query = db.Transactions.AsNoTracking()
+        .Where(t => t.Status == TransactionStatus.Rejected);
+
+    var now = DateTime.UtcNow;
+    DateTime? from = period switch
+    {
+        "week" => now.AddDays(-7),
+        "month" => new DateTime(now.Year, now.Month, 1),
+        "quarter" => now.AddMonths(-3),
+        "year" => new DateTime(now.Year, 1, 1),
+        _ => null
+    };
+    if (from.HasValue) query = query.Where(t => t.CreatedAt >= from.Value);
+    if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, out var tFilter))
+        query = query.Where(t => t.Type == tFilter);
+    if (!string.IsNullOrEmpty(branchId) && Guid.TryParse(branchId, out var brFilter))
+        query = query.Where(t => t.SenderBranchId == brFilter || t.ReceiverBranchId == brFilter);
+
+    var rows = await query
+        .OrderByDescending(t => t.CreatedAt)
+        .Take(500)
+        .Select(t => new RejectionAnalysisRow
+        {
+            ReferenceNumber = t.ReferenceNumber,
+            Subject = t.Subject,
+            Type = t.Type,
+            RejectedAt = t.CreatedAt,
+            RejectionNote = t.RejectionNote,
+            RejectedBy = "—",
+            SenderBranch = t.SenderBranchId.HasValue
+                ? db.Branches.Where(b => b.Id == t.SenderBranchId).Select(b => b.NameAr).FirstOrDefault()
+                : null,
+            ReceiverBranch = t.ReceiverBranchId.HasValue
+                ? db.Branches.Where(b => b.Id == t.ReceiverBranchId).Select(b => b.NameAr).FirstOrDefault()
+                : null,
+        })
+        .ToListAsync();
+
+    var totalCount = rows.Count;
+
+    var byType = rows.GroupBy(r => r.Type)
+        .Select(g => new RejectionGroup
+        {
+            Label = g.Key switch
+            {
+                TransactionType.DocumentDelivery => "تسليم مستندات",
+                TransactionType.CashTransfer => "تحويل نقدي",
+                TransactionType.InternalDepartment => "داخلي بين الإدارات",
+                TransactionType.BranchToBranch => "بين الفروع",
+                _ => "أخرى"
+            },
+            Count = g.Count(),
+            Percentage = totalCount > 0 ? (double)g.Count() / totalCount * 100 : 0
+        })
+        .OrderByDescending(g => g.Count)
+        .ToList();
+
+    var byBranch = rows.Where(r => !string.IsNullOrEmpty(r.SenderBranch))
+        .GroupBy(r => r.SenderBranch!)
+        .Select(g => new RejectionGroup
+        {
+            Label = g.Key,
+            Count = g.Count(),
+            Percentage = totalCount > 0 ? (double)g.Count() / totalCount * 100 : 0
+        })
+        .OrderByDescending(g => g.Count)
+        .Take(10)
+        .ToList();
+
+    var summary = new ReportSummary
+    {
+        Total = totalCount,
+        Rejected = totalCount,
+        Pending = 0,
+        Completed = 0
+    };
+
+    return (rows, byType, byBranch, summary);
+}
+
+// ───────── Executive Report (للإدارة العليا) ─────────
+static async Task<ExecutiveReportData> BuildExecutiveReport(
+    IAppDbContext db, ICurrentUserService currentUser, string? period, string? type, string? branchId)
+{
+    var (data, summary) = await BuildReportData(db, currentUser, period, type, branchId);
+    var branches = await BuildBranchReport(data, db);
+
+    var deptIds = await db.Departments.AsNoTracking()
+        .Where(d => d.IsActive).OrderBy(d => d.NameAr)
+        .Select(d => new { d.Id, d.NameAr }).ToListAsync();
+
+    var departments = deptIds.Select(d =>
+    {
+        var outgoing = data.Count(t => t.SenderDepartmentId == d.Id);
+        var incoming = data.Count(t => t.ReceiverDepartmentId == d.Id);
+        var total = outgoing + incoming;
+        if (total == 0) return null;
+        return new DepartmentReportRow
+        {
+            DepartmentName = d.NameAr,
+            Outgoing = outgoing,
+            Incoming = incoming,
+            Total = total,
+            Pending = data.Count(t => (t.SenderDepartmentId == d.Id || t.ReceiverDepartmentId == d.Id) && (t.Status == TransactionStatus.Sent || t.Status == TransactionStatus.InTransit)),
+            Completed = data.Count(t => (t.SenderDepartmentId == d.Id || t.ReceiverDepartmentId == d.Id) && (t.Status == TransactionStatus.Received || t.Status == TransactionStatus.Archived)),
+            Rejected = data.Count(t => (t.SenderDepartmentId == d.Id || t.ReceiverDepartmentId == d.Id) && t.Status == TransactionStatus.Rejected)
+        };
+    }).Where(x => x != null).Cast<DepartmentReportRow>().OrderByDescending(d => d.Total).ToList();
+
+    var typeBreakdown = data.GroupBy(t => t.Type).ToDictionary(g => g.Key, g => g.Count());
+
+    var periodLabel = period switch
+    {
+        "week" => "هذا الأسبوع",
+        "month" => "هذا الشهر",
+        "quarter" => "آخر 3 أشهر",
+        "year" => "هذه السنة",
+        _ => "كل الفترات"
+    };
+
+    return new ExecutiveReportData
+    {
+        Summary = summary,
+        Branches = branches.OrderByDescending(b => b.Total).ToList(),
+        Departments = departments,
+        TypeBreakdown = typeBreakdown,
+        TotalRejected = summary.Rejected,
+        TotalArchived = data.Count(t => t.Status == TransactionStatus.Archived),
+        PeriodLabel = periodLabel
+    };
 }
 
 // Lightweight DTO for report data in endpoints

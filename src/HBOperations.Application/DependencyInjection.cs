@@ -2,6 +2,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using HBOperations.Application.Common.Behaviors;
+using HBOperations.Application.Common.Reports;
 using HBOperations.Application.Workflow;
 
 namespace HBOperations.Application;
@@ -18,6 +19,13 @@ public static class DependencyInjection
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
         services.AddSingleton<TransactionStateMachine>();
 
+        // Reports infrastructure
+        services.AddMemoryCache();
+        services.AddSingleton<IReportRateLimiter, ReportRateLimiter>();
+        services.AddScoped<IReportAccessPolicy, ReportAccessPolicy>();
+        services.AddSingleton<IReportSanitizer, ReportSanitizer>();
+
         return services;
     }
 }
+

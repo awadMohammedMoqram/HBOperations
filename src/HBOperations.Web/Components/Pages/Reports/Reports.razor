@@ -2,12 +2,17 @@
 @rendermode InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
 @using HBOperations.Application.Common.Interfaces
 @using HBOperations.Application.Common.DTOs
+@using HBOperations.Application.Common.Reports
 @using HBOperations.Domain.Enums
+@using HBOperations.Infrastructure.Identity
 @using Microsoft.EntityFrameworkCore
 @inject IAppDbContext DbContext
 @inject ICurrentUserService CurrentUser
+@inject IReportAccessPolicy AccessPolicy
+@inject UserManager<ApplicationUser> UserManager
 @inject NavigationManager Navigation
 
 <PageTitle>التقارير - بنك حضرموت</PageTitle>
@@ -33,6 +38,19 @@
         <!-- Filters Bar -->
         <div class="filters-bar">
             <div class="filters-row">
+                @if (_availableReports.Count > 1)
+                {
+                    <div class="filter-group">
+                        <label class="filter-label"><i class="bi bi-file-earmark-text"></i> نوع التقرير</label>
+                        <select class="filter-select" @bind="_selectedReportType">
+                            @foreach (var rt in _availableReports)
+                            {
+                                <option value="@rt.ToString()">@ReportAccessPolicy.GetArabicName(rt)</option>
+                            }
+                        </select>
+                    </div>
+                }
+
                 <div class="filter-group">
                     <label class="filter-label"><i class="bi bi-calendar-range"></i> الفترة</label>
                     <select class="filter-select" @bind="_selectedPeriod" @bind:after="ReloadData">
@@ -115,23 +133,27 @@
 
         <!-- Charts Row -->
         <div class="charts-row">
-            <!-- Activity Chart -->
+            <!-- Activity Chart — Horizontal Bars -->
             <div class="hb-card chart-card">
                 <h3 class="card-section-title"><i class="bi bi-graph-up"></i> نشاط المعاملات</h3>
-                <div class="activity-chart">
+                <div class="activity-hbars">
                     @{
                         var maxVal = _activityData.Values.Any() ? _activityData.Values.Max() : 1;
                     }
                     @foreach (var item in _activityData)
                     {
                         var pct = maxVal > 0 ? (double)item.Value / maxVal * 100 : 0;
-                        <div class="activity-bar-col">
-                            <span class="activity-bar-value">@item.Value</span>
-                            <div class="activity-bar-track">
-                                <div class="activity-bar-fill" style="height: @pct.ToString("F0")%"></div>
+                        <div class="activity-hbar-row">
+                            <span class="activity-hbar-label">@item.Key</span>
+                            <div class="activity-hbar-track">
+                                <div class="activity-hbar-fill" style="width: @pct.ToString("F0")%"></div>
                             </div>
-                            <span class="activity-bar-label">@item.Key</span>
+                            <span class="activity-hbar-value">@item.Value</span>
                         </div>
+                    }
+                    @if (!_activityData.Any())
+                    {
+                        <p class="empty-chart-msg">لا توجد بيانات للفترة المحددة</p>
                     }
                 </div>
             </div>
@@ -310,6 +332,81 @@
             </div>
         }
 
+        <!-- Critical Transactions (executives/auditors) -->
+        @if (_criticalTransactions.Any())
+        {
+            <div class="hb-card">
+                <h3 class="card-section-title"><i class="bi bi-exclamation-triangle-fill" style="color:#e65100"></i> أقدم المعاملات الحرجة (تحتاج متابعة)</h3>
+                <div class="report-table-wrapper">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>المرجع</th>
+                                <th>الموضوع</th>
+                                <th>النوع</th>
+                                <th>الحالة</th>
+                                <th>المرسل</th>
+                                <th>المستقبل</th>
+                                <th>منذ</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in _criticalTransactions)
+                            {
+                                var ageDays = (DateTime.UtcNow - t.CreatedAt).TotalDays;
+                                <tr>
+                                    <td class="cell-bold">@t.ReferenceNumber</td>
+                                    <td class="cell-name">@t.Subject</td>
+                                    <td>@GetTypeName(t.Type)</td>
+                                    <td><span class="status-badge @GetStatusClass(t.Status)">@GetStatusName(t.Status)</span></td>
+                                    <td>@(t.SenderName ?? "—")</td>
+                                    <td>@(t.ReceiverName ?? "—")</td>
+                                    <td class="@(ageDays > 2 ? "cell-danger" : "cell-warning")">@ageDays.ToString("F0") يوم</td>
+                                    <td><a href="@($"/transactions/{t.Id}")" class="row-action-btn">عرض</a></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <!-- Staff Performance (branch/department managers) -->
+        @if (_staffPerformance.Any())
+        {
+            <div class="hb-card">
+                <h3 class="card-section-title"><i class="bi bi-people-fill"></i> أداء الموظفين</h3>
+                <div class="report-table-wrapper">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>الموظف</th>
+                                <th>أنشأها/أرسلها</th>
+                                <th>استلمها</th>
+                                <th>معلّقة لديه</th>
+                                <th>مرفوضة</th>
+                                <th>متوسط الوقت (ساعة)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in _staffPerformance)
+                            {
+                                <tr>
+                                    <td class="cell-name">@s.Name</td>
+                                    <td class="cell-bold">@s.Created</td>
+                                    <td class="cell-success">@s.Received</td>
+                                    <td class="cell-warning">@s.Pending</td>
+                                    <td class="cell-danger">@s.Rejected</td>
+                                    <td>@(s.AvgHours > 0 ? s.AvgHours.ToString("F1") : "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
         <!-- Performance KPIs -->
         @if (_summary.Total > 0)
         {
@@ -334,6 +431,78 @@
                 </div>
             </div>
         }
+
+        <!-- Transactions Table (all roles, scoped) — آخر قسم -->
+        @if (_transactions.Any())
+        {
+            <div class="hb-card">
+                <div class="tx-header">
+                    <h3 class="card-section-title"><i class="bi bi-list-ul"></i> @_sectionTitle (@_transactions.Count)</h3>
+                    <input type="search" class="tx-search" placeholder="🔎 بحث بالمرجع أو الموضوع..."
+                           @bind="_txSearch" @bind:event="oninput" @bind:after="() => _currentPage = 1" />
+                </div>
+                @{
+                    var filtered = string.IsNullOrWhiteSpace(_txSearch)
+                        ? _transactions
+                        : _transactions.Where(t =>
+                            t.ReferenceNumber.Contains(_txSearch, StringComparison.OrdinalIgnoreCase) ||
+                            t.Subject.Contains(_txSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+                    var totalPages = (int)Math.Ceiling((double)filtered.Count / PageSize);
+                    if (_currentPage > totalPages && totalPages > 0) _currentPage = totalPages;
+                    var pageItems = filtered.Skip((_currentPage - 1) * PageSize).Take(PageSize).ToList();
+                }
+                <div class="report-table-wrapper">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>المرجع</th>
+                                <th>الموضوع</th>
+                                <th>النوع</th>
+                                <th>الحالة</th>
+                                <th>المرسل</th>
+                                <th>المستقبل</th>
+                                <th>التاريخ</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (pageItems.Count == 0)
+                            {
+                                <tr><td colspan="8" style="text-align:center;color:#6b7280;padding:1rem">لا توجد نتائج مطابقة</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var t in pageItems)
+                                {
+                                    <tr>
+                                        <td class="cell-bold">@t.ReferenceNumber</td>
+                                        <td class="cell-name">@t.Subject</td>
+                                        <td>@GetTypeName(t.Type)</td>
+                                        <td><span class="status-badge @GetStatusClass(t.Status)">@GetStatusName(t.Status)</span></td>
+                                        <td>@(t.SenderName ?? "—")</td>
+                                        <td>@(t.ReceiverName ?? "—")</td>
+                                        <td>@t.CreatedAt.ToString("yyyy/MM/dd")</td>
+                                        <td><a href="@($"/transactions/{t.Id}")" class="row-action-btn">عرض</a></td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (totalPages > 1)
+                {
+                    <div class="tx-pagination">
+                        <button class="page-btn" disabled="@(_currentPage == 1)" @onclick="() => _currentPage = Math.Max(1, _currentPage - 1)">
+                            <i class="bi bi-chevron-right"></i> السابق
+                        </button>
+                        <span class="page-info">صفحة @_currentPage من @totalPages</span>
+                        <button class="page-btn" disabled="@(_currentPage >= totalPages)" @onclick="() => _currentPage = Math.Min(totalPages, _currentPage + 1)">
+                            التالي <i class="bi bi-chevron-left"></i>
+                        </button>
+                    </div>
+                }
+            </div>
+        }
     }
 </div>
 
@@ -345,6 +514,8 @@
     private string _selectedPeriod = "month";
     private string _selectedType = "";
     private string _selectedBranchId = "";
+    private string _selectedReportType = "";
+    private List<ReportType> _availableReports = [];
 
     private ReportSummary _summary = new();
     private Dictionary<string, int> _activityData = [];
@@ -354,12 +525,33 @@
     private List<AdminAffairsReportRow> _adminAffairsReport = [];
     private List<(Guid Id, string NameAr)> _branches = [];
 
+    // Rich transactions list (paginated)
+    private List<TxRow> _transactions = [];
+    private List<TxRow> _criticalTransactions = []; // pending > 48h or oldest pending/rejected
+    private List<StaffPerfRow> _staffPerformance = [];
+    private int _currentPage = 1;
+    private const int PageSize = 15;
+    private string _txSearch = "";
+    private string _sectionTitle = "المعاملات";
+
+    private record TxRow(Guid Id, string ReferenceNumber, string Subject, TransactionType Type,
+                         TransactionStatus Status, string? SenderName, string? ReceiverName,
+                         DateTime CreatedAt, DateTime? ReceivedAt, string? RejectionNote);
+
+    private record StaffPerfRow(string Name, int Created, int Received, int Pending, int Rejected, double AvgHours);
+
     protected override async Task OnInitializedAsync()
     {
         _branches = await DbContext.Branches.AsNoTracking()
             .Where(b => b.IsActive).OrderBy(b => b.NameAr)
             .Select(b => new ValueTuple<Guid, string>(b.Id, b.NameAr))
             .ToListAsync();
+
+        // Load available report types from policy
+        var scope = await AccessPolicy.GetUserScopeAsync(CurrentUser, DbContext);
+        _availableReports = AccessPolicy.GetAvailableReports(scope).ToList();
+        var defaultType = AccessPolicy.GetDefaultReport(scope);
+        _selectedReportType = defaultType.ToString();
 
         await LoadData();
     }
@@ -547,7 +739,125 @@
             }).ToList();
         }
 
+        // ─── Rich transactions list (scoped to user's visibility) ───
+        await LoadRichTransactions(query);
+
+        // ─── Staff performance for branch/department managers ───
+        if (CurrentUser.IsInRole("BranchManager") || CurrentUser.IsInRole("OfficeManager") ||
+            CurrentUser.IsInRole("DepartmentManager"))
+        {
+            await LoadStaffPerformance(query);
+        }
+
+        // ─── Critical transactions for executives/auditors ───
+        if (_hasGlobalAccess)
+        {
+            _criticalTransactions = _transactions
+                .Where(t => t.Status == TransactionStatus.Sent || t.Status == TransactionStatus.InTransit
+                         || t.Status == TransactionStatus.Rejected)
+                .OrderBy(t => t.CreatedAt)
+                .Take(10)
+                .ToList();
+        }
+
+        // Section title based on role
+        _sectionTitle = _hasGlobalAccess ? "أحدث المعاملات في النظام"
+                      : _isAdminAffairs ? "معاملات التوصيل"
+                      : (CurrentUser.IsInRole("BranchManager") || CurrentUser.IsInRole("OfficeManager")) ? "معاملات الفرع"
+                      : CurrentUser.IsInRole("DepartmentManager") ? "معاملات الإدارة"
+                      : "معاملاتي";
+
+        _currentPage = 1;
         _loading = false;
+    }
+
+    private async Task LoadRichTransactions(IQueryable<HBOperations.Domain.Entities.Transaction> baseQuery)
+    {
+        var rows = await baseQuery
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(500) // safety cap
+            .Select(t => new
+            {
+                t.Id,
+                t.ReferenceNumber,
+                t.Subject,
+                t.Type,
+                t.Status,
+                SenderBranch = t.SenderBranch != null ? t.SenderBranch.NameAr : null,
+                ReceiverBranch = t.ReceiverBranch != null ? t.ReceiverBranch.NameAr : null,
+                SenderDept = t.SenderDepartment != null ? t.SenderDepartment.NameAr : null,
+                ReceiverDept = t.ReceiverDepartment != null ? t.ReceiverDepartment.NameAr : null,
+                t.CreatedAt,
+                t.ReceivedAt,
+                t.RejectionNote
+            })
+            .ToListAsync();
+
+        _transactions = rows.Select(t => new TxRow(
+            t.Id,
+            t.ReferenceNumber ?? "—",
+            t.Subject ?? "—",
+            t.Type,
+            t.Status,
+            t.SenderBranch ?? t.SenderDept,
+            t.ReceiverBranch ?? t.ReceiverDept,
+            t.CreatedAt,
+            t.ReceivedAt,
+            t.RejectionNote
+        )).ToList();
+    }
+
+    private async Task LoadStaffPerformance(IQueryable<HBOperations.Domain.Entities.Transaction> baseQuery)
+    {
+        var rows = await baseQuery
+            .Select(t => new
+            {
+                t.CreatedByUserId,
+                t.SenderUserId,
+                t.ReceiverUserId,
+                t.Status,
+                t.SentAt,
+                t.ReceivedAt
+            })
+            .ToListAsync();
+
+        // جمع كل المعرفات المشاركة
+        var userIds = rows.Select(r => r.CreatedByUserId)
+            .Concat(rows.Select(r => r.SenderUserId))
+            .Concat(rows.Where(r => r.ReceiverUserId.HasValue).Select(r => r.ReceiverUserId!.Value))
+            .Distinct()
+            .ToList();
+
+        // جلب الأسماء من Identity
+        var users = await UserManager.Users
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FullNameAr, u.UserName })
+            .ToListAsync();
+
+        var nameLookup = users.ToDictionary(u => u.Id, u => u.FullNameAr ?? u.UserName ?? "—");
+
+        _staffPerformance = userIds.Select(uid =>
+        {
+            var created = rows.Count(r => r.CreatedByUserId == uid || r.SenderUserId == uid);
+            var received = rows.Count(r => r.ReceiverUserId == uid &&
+                (r.Status == TransactionStatus.Received || r.Status == TransactionStatus.Archived));
+            var pending = rows.Count(r => r.ReceiverUserId == uid &&
+                (r.Status == TransactionStatus.Sent || r.Status == TransactionStatus.InTransit));
+            var rejected = rows.Count(r => (r.CreatedByUserId == uid || r.SenderUserId == uid) &&
+                r.Status == TransactionStatus.Rejected);
+
+            var withTime = rows.Where(r =>
+                (r.CreatedByUserId == uid || r.SenderUserId == uid) &&
+                r.ReceivedAt.HasValue && r.SentAt != default)
+                .ToList();
+            var avg = withTime.Any() ? withTime.Average(r => (r.ReceivedAt!.Value - r.SentAt).TotalHours) : 0;
+
+            return new StaffPerfRow(nameLookup.GetValueOrDefault(uid, "—"), created, received, pending, rejected, avg);
+        })
+        .Where(p => p.Created + p.Received > 0)
+        .OrderByDescending(p => p.Created + p.Received)
+        .Take(20)
+        .ToList();
     }
 
     private (DateTime? from, DateTime? to) GetDateRange()
@@ -622,6 +932,7 @@
         var qs = $"?period={_selectedPeriod}";
         if (!string.IsNullOrEmpty(_selectedType)) qs += $"&type={_selectedType}";
         if (!string.IsNullOrEmpty(_selectedBranchId)) qs += $"&branchId={_selectedBranchId}";
+        if (!string.IsNullOrEmpty(_selectedReportType)) qs += $"&reportType={_selectedReportType}";
         return format == "pdf"
             ? $"/api/reports/export-pdf{qs}"
             : $"/api/reports/export-excel{qs}";
@@ -635,5 +946,23 @@
         TransactionType.BranchToBranch => "بين الفروع",
         TransactionType.Other => "أخرى",
         _ => t.ToString()
+    };
+
+    private static string GetStatusName(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Sent => "مُرسلة",
+        TransactionStatus.InTransit => "قيد التوصيل",
+        TransactionStatus.Received => "مستلمة",
+        TransactionStatus.Rejected => "مرفوضة",
+        TransactionStatus.Archived => "مؤرشفة",
+        _ => s.ToString()
+    };
+
+    private static string GetStatusClass(TransactionStatus s) => s switch
+    {
+        TransactionStatus.Received or TransactionStatus.Archived => "status-success",
+        TransactionStatus.Rejected => "status-danger",
+        TransactionStatus.Sent or TransactionStatus.InTransit => "status-warning",
+        _ => "status-default"
     };
 }
