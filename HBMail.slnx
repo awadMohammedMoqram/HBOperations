@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HBMail.Domain/HBMail.Domain.csproj" />
+    <Project Path="src/HBMail.Application/HBMail.Application.csproj" />
+    <Project Path="src/HBMail.Infrastructure/HBMail.Infrastructure.csproj" />
+    <Project Path="src/HBMail.Web/HBMail.Web.csproj" />
+  </Folder>
+  <Properties>
+    <Property Name="ActiveCfg" Value="Debug|Any CPU" />
+    <Property Name="StartupProject" Value="src/HBMail.Web/HBMail.Web.csproj" />
+  </Properties>
+</Solution>

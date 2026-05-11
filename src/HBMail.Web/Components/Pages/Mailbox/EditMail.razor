@@ -1,0 +1,392 @@
+﻿@page "/mail/edit/{Id:guid}"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using HBMail.Application.Common.Interfaces
+@using HBMail.Domain.Entities
+@using HBMail.Domain.Enums
+@using HBMail.Infrastructure.Identity
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+@inject ICurrentUserService CurrentUser
+@inject UserManager<ApplicationUser> UserManager
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>تعديل البريد - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="page-title-section centered-header">
+        <button type="button" class="btn-hb-outline btn-back back-floating" @onclick="GoBack">
+            <i class="bi bi-arrow-right"></i> العودة
+        </button>
+        <div class="centered-title-block">
+            <h1 class="section-title">
+                <i class="bi bi-pencil-square"></i>
+                @(_isAdminMode ? "تعديل إداري للبريد" : "تعديل البريد")
+            </h1>
+            <p class="section-subtitle">@_transaction?.ReferenceNumber</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="hb-alert hb-alert-success">
+            <i class="bi bi-check-circle-fill"></i> @_successMessage
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="hb-alert hb-alert-danger">
+            <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="hb-loading">
+            <div class="hb-spinner"></div>
+            <span>جاري التحميل...</span>
+        </div>
+    }
+    else if (_transaction == null)
+    {
+        <div class="hb-alert hb-alert-danger">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            البريد غير موجودة، أو لا يمكن تعديلها (مؤرشفة أو ليس لديك صلاحية).
+        </div>
+    }
+    else
+    {
+        <div class="form-layout">
+            <div class="hb-card">
+                <div class="hb-card-header">
+                    <h2 class="hb-card-title">
+                        <i class="bi bi-file-earmark-text"></i>
+                        @(_isAdminMode ? "بيانات البريد (وضع المدير)" : "بيانات البريد")
+                    </h2>
+                </div>
+
+                @if (_isAdminMode)
+                {
+                    <div class="info-banner info-banner-admin">
+                        <i class="bi bi-shield-lock-fill"></i>
+                        أنت تُعدّل هذا البريد بصلاحية <strong>مدير النظام</strong>.
+                        سيُسجَّل اسمك وتاريخ التعديل ويظهر بوضوح في تفاصيل البريد.
+                    </div>
+                }
+                else
+                {
+                    <div class="info-banner">
+                        <i class="bi bi-info-circle-fill"></i>
+                        التعديل متاح فقط للمُنشئ، وفقط طالما البريد في حالة "بانتظار الاستلام".
+                    </div>
+                }
+
+                <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="EditTransaction">
+                    <div class="form-grid">
+                        <div class="hb-form-group full-width">
+                            <label class="hb-form-label">الموضوع <span class="required-star">*</span></label>
+                            <InputText @bind-Value="_model.Subject" class="hb-form-control" />
+                        </div>
+
+                        <div class="hb-form-group full-width">
+                            <label class="hb-form-label">الوصف</label>
+                            <InputTextArea @bind-Value="_model.Description" class="hb-form-control textarea" rows="3" />
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">نوع البريد <span class="required-star">*</span></label>
+                            <InputSelect @bind-Value="_model.Type" class="hb-form-control">
+                                @foreach (var type in Enum.GetValues<MailType>())
+                                {
+                                    <option value="@type">@GetTypeLabel(type)</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الأولوية <span class="required-star">*</span></label>
+                            <InputSelect @bind-Value="_model.Priority" class="hb-form-control">
+                                @foreach (var priority in Enum.GetValues<MailPriority>())
+                                {
+                                    <option value="@priority">@GetPriorityLabel(priority)</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">تاريخ الإرسال الفعلي <span class="required-star">*</span></label>
+                            <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_model.SentAt" class="hb-form-control" />
+                        </div>
+
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">تاريخ الاستحقاق</label>
+                            <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_model.DueDate" class="hb-form-control" />
+                        </div>
+
+                        @if (_isAdminMode && _transaction!.ReceivedAt.HasValue)
+                        {
+                            <div class="hb-form-group">
+                                <label class="hb-form-label">
+                                    <i class="bi bi-check2-circle"></i> تاريخ الاستلام الفعلي
+                                </label>
+                                <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_model.ReceivedAt" class="hb-form-control" />
+                                <small class="hb-form-help">تعديل وقت الاستلام (إداري فقط)</small>
+                            </div>
+                        }
+
+                        <div class="hb-form-group full-width">
+                            <label class="hb-form-label">
+                                <i class="bi bi-chat-left-text"></i> ملاحظة المرسل
+                            </label>
+                            <InputTextArea @bind-Value="_model.SenderNote" class="hb-form-control note-textarea" rows="3" maxlength="1000" />
+                        </div>
+
+                        @if (_isAdminMode)
+                        {
+                            <div class="hb-form-group full-width">
+                                <label class="hb-form-label">
+                                    <i class="bi bi-chat-left-dots"></i> ملاحظة المستلم
+                                </label>
+                                <InputTextArea @bind-Value="_model.ReceiverNote" class="hb-form-control note-textarea" rows="3" maxlength="1000" />
+                            </div>
+
+                            <div class="hb-form-group full-width admin-edit-reason">
+                                <label class="hb-form-label">
+                                    <i class="bi bi-pencil-square"></i> سبب التعديل الإداري <span class="required-star">*</span>
+                                </label>
+                                <InputTextArea @bind-Value="_model.AdminEditReason" class="hb-form-control note-textarea" rows="3" maxlength="500"
+                                               placeholder="اذكر سبب تعديلك لهذا البريد (سيُحفظ في السجل)..." />
+                            </div>
+                        }
+
+                        <div class="hb-form-group full-width require-doc-toggle">
+                            <label class="toggle-label">
+                                <InputCheckbox @bind-Value="_model.RequireReceiverDocument" />
+                                <span class="toggle-text">
+                                    <strong><i class="bi bi-file-earmark-check"></i> اشتراط رفع مستند إثبات استلام</strong>
+                                    <small>يمكنك تغيير هذا الإعداد طالما لم تُستلَم البريد بعد.</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-hb-primary" disabled="@_submitting">
+                            @if (_submitting)
+                            {
+                                <span class="hb-spinner" style="width:20px;height:20px;border-width:2px;"></span>
+                                <span>جاري الحفظ...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-check-lg"></i>
+                                <span>حفظ التغييرات</span>
+                            }
+                        </button>
+                        <a href="/mail/@Id" class="btn-hb-outline">
+                            <i class="bi bi-x-lg"></i> إلغاء
+                        </a>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Mail? _transaction;
+    private readonly EditTransactionModel _model = new();
+    private bool _loading = true, _submitting;
+    private string? _successMessage, _errorMessage;
+    private bool _isAdminMode;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tx = await DbContext.Mails.FindAsync(Id);
+
+        if (tx is null)
+        {
+            _loading = false;
+            return;
+        }
+
+        var isCreator = tx.CreatedByUserId == CurrentUser.UserId || tx.SenderUserId == CurrentUser.UserId;
+        var isSuperAdmin = CurrentUser.IsInRole("SuperAdmin");
+
+        // قواعد الوصول:
+        // 1) المُنشئ: فقط في حالة Sent
+        // 2) SuperAdmin: أي حالة عدا Archived
+        var allowedAsCreator = isCreator && tx.Status == MailStatus.Sent;
+        var allowedAsAdmin   = isSuperAdmin && tx.Status != MailStatus.Archived;
+
+        if (!allowedAsCreator && !allowedAsAdmin)
+        {
+            _loading = false;
+            return;
+        }
+
+        // وضع المدير يُفعَّل عندما لا يكون المستخدم هو المُنشئ، أو عندما تكون الحالة ليست Sent
+        _isAdminMode = isSuperAdmin && (!isCreator || tx.Status != MailStatus.Sent);
+
+        _transaction = tx;
+        _model.Subject = tx.Subject;
+        _model.Description = tx.Description;
+        _model.Type = tx.Type;
+        _model.Priority = tx.Priority;
+        _model.DueDate = tx.DueDate;
+        _model.SentAt = AppTime.ToYemen(tx.SentAt);
+        _model.ReceivedAt = AppTime.ToYemen(tx.ReceivedAt);
+        _model.SenderNote = tx.SenderNote;
+        _model.ReceiverNote = tx.ReceiverNote;
+        _model.RequireReceiverDocument = tx.RequireReceiverDocument;
+
+        _loading = false;
+    }
+
+    private async Task GoBack() => await JS.InvokeVoidAsync("history.back");
+
+    private async Task HandleSubmit()
+    {
+        if (_transaction is null) return;
+        _submitting = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_model.Subject))
+            {
+                _errorMessage = "يرجى إدخال موضوع البريد";
+                return;
+            }
+
+            if (_isAdminMode && string.IsNullOrWhiteSpace(_model.AdminEditReason))
+            {
+                _errorMessage = "يرجى إدخال سبب التعديل الإداري";
+                return;
+            }
+
+            var sentAtUtc = AppTime.FromYemenToUtc(_model.SentAt);
+
+            DateTime? receivedAtUtc = null;
+            if (_model.ReceivedAt.HasValue)
+            {
+                receivedAtUtc = AppTime.FromYemenToUtc(_model.ReceivedAt.Value);
+                if (receivedAtUtc < sentAtUtc)
+                {
+                    _errorMessage = "تاريخ الاستلام لا يمكن أن يكون قبل تاريخ الإرسال";
+                    return;
+                }
+            }
+
+            var fresh = await DbContext.Mails.FindAsync(Id);
+            if (fresh is null)
+            {
+                _errorMessage = "البريد غير موجودة";
+                return;
+            }
+
+            if (fresh.Status == MailStatus.Archived)
+            {
+                _errorMessage = "لا يمكن تعديل بريد مؤرشفة";
+                return;
+            }
+
+            // تأكد من بقاء الصلاحية بعد إعادة التحميل
+            var isCreator = fresh.CreatedByUserId == CurrentUser.UserId || fresh.SenderUserId == CurrentUser.UserId;
+            var isSuperAdmin = CurrentUser.IsInRole("SuperAdmin");
+            if (!isSuperAdmin && !(isCreator && fresh.Status == MailStatus.Sent))
+            {
+                _errorMessage = "ليس لديك صلاحية تعديل هذا البريد";
+                return;
+            }
+
+            fresh.Subject = _model.Subject.Trim();
+            fresh.Description = string.IsNullOrWhiteSpace(_model.Description) ? null : _model.Description.Trim();
+            fresh.Type = _model.Type;
+            fresh.Priority = _model.Priority;
+            fresh.DueDate = _model.DueDate;
+            fresh.SentAt = sentAtUtc;
+            fresh.SenderNote = string.IsNullOrWhiteSpace(_model.SenderNote) ? null : _model.SenderNote.Trim();
+            fresh.RequireReceiverDocument = _model.RequireReceiverDocument;
+            fresh.UpdatedAt = DateTime.UtcNow;
+
+            if (_isAdminMode)
+            {
+                fresh.ReceiverNote = string.IsNullOrWhiteSpace(_model.ReceiverNote) ? null : _model.ReceiverNote.Trim();
+                if (receivedAtUtc.HasValue && fresh.ReceivedAt.HasValue)
+                {
+                    fresh.ReceivedAt = receivedAtUtc;
+                    if (fresh.Status == MailStatus.Received)
+                        fresh.CompletedAt = receivedAtUtc;
+                }
+
+                fresh.AdminEditedAt = DateTime.UtcNow;
+                fresh.AdminEditedByUserId = CurrentUser.UserId;
+                fresh.AdminEditedByName = CurrentUser.FullName ?? CurrentUser.UserName;
+
+                fresh.History.Add(new MailHistory
+                {
+                    MailId = fresh.Id,
+                    FromStatus = fresh.Status,
+                    ToStatus = fresh.Status,
+                    Action = "تعديل إداري من قبل مدير النظام",
+                    Notes = _model.AdminEditReason!.Trim(),
+                    PerformedByUserId = CurrentUser.UserId,
+                    PerformedAt = DateTime.UtcNow
+                });
+            }
+
+            await DbContext.SaveChangesAsync();
+            _successMessage = _isAdminMode
+                ? "تم حفظ التعديل الإداري بنجاح"
+                : "تم تحديث البريد بنجاح";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"حدث خطأ أثناء التحديث: {ex.Message}";
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private static string GetTypeLabel(MailType t) => t switch
+    {
+        MailType.DocumentDelivery => "تسليم مرفقات",
+        MailType.CashTransfer => "تحويل نقدي",
+        MailType.InternalDepartment => "داخلي بين الإدارات",
+        MailType.BranchToBranch => "بين الفروع",
+        MailType.Other => "أخرى",
+        _ => t.ToString()
+    };
+
+    private static string GetPriorityLabel(MailPriority p) => p switch
+    {
+        MailPriority.Normal => "عادية",
+        MailPriority.Important => "مهمة",
+        MailPriority.Urgent => "عاجلة",
+        _ => p.ToString()
+    };
+
+    private class EditTransactionModel
+    {
+        public string Subject { get; set; } = "";
+        public string? Description { get; set; }
+        public MailType Type { get; set; }
+        public MailPriority Priority { get; set; }
+        public DateTime? DueDate { get; set; }
+        public DateTime SentAt { get; set; } = AppTime.YemenNow;
+        public DateTime? ReceivedAt { get; set; }
+        public string? SenderNote { get; set; }
+        public string? ReceiverNote { get; set; }
+        public string? AdminEditReason { get; set; }
+        public bool RequireReceiverDocument { get; set; }
+    }
+}

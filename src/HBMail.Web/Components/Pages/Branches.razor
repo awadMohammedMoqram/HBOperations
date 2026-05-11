@@ -1,0 +1,434 @@
+﻿@page "/branches"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "SuperAdmin,ITAdmin")]
+@using HBMail.Application.Common.Interfaces
+@using HBMail.Domain.Entities
+@using HBMail.Domain.Enums
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+
+<PageTitle>الفروع - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="page-title-section">
+        <div class="title-with-action">
+            <div>
+                <h1 class="section-title"><i class="bi bi-building"></i> الفروع والمكاتب</h1>
+                <p class="section-subtitle">الهيكل التنظيمي لفروع ومكاتب البنك</p>
+            </div>
+            <button class="btn-hb-primary" @onclick="OpenAddModal">
+                <i class="bi bi-plus-circle"></i> إضافة فرع
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="branch-stats">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary"><i class="bi bi-bank2"></i></div>
+            <div class="stat-info">
+                <span class="stat-number">@_headOfficeCount</span>
+                <span class="stat-label">الإدارة العامة</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-gold"><i class="bi bi-building"></i></div>
+            <div class="stat-info">
+                <span class="stat-number">@_mainBranchCount</span>
+                <span class="stat-label">فروع رئيسية</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-success"><i class="bi bi-shop"></i></div>
+            <div class="stat-info">
+                <span class="stat-number">@_branchCount</span>
+                <span class="stat-label">فروع</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon bg-info"><i class="bi bi-geo-alt"></i></div>
+            <div class="stat-info">
+                <span class="stat-number">@_officeCount</span>
+                <span class="stat-label">مكاتب</span>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="hb-alert hb-alert-success">
+            <i class="bi bi-check-circle-fill"></i> @_successMessage
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="hb-loading">
+            <div class="hb-spinner"></div>
+            <span>جاري تحميل الفروع...</span>
+        </div>
+    }
+    else
+    {
+        <!-- Branch Table -->
+        <div class="table-container">
+            <table class="hb-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>اسم الفرع</th>
+                        <th>الكود</th>
+                        <th>النوع</th>
+                        <th>العنوان</th>
+                        <th>الهاتف</th>
+                        <th>الحالة</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var index = 0; }
+                    @foreach (var branch in _branches)
+                    {
+                        index++;
+                        <tr>
+                            <td>@index</td>
+                            <td class="branch-name">
+                                <i class="@GetBranchIcon(branch.BranchType)"></i>
+                                @branch.NameAr
+                            </td>
+                            <td><span class="code-badge">@branch.Code</span></td>
+                            <td>
+                                <span class="hb-badge @GetBranchTypeBadge(branch.BranchType)">
+                                    @GetBranchTypeLabel(branch.BranchType)
+                                </span>
+                            </td>
+                            <td>@(branch.Address ?? "—")</td>
+                            <td dir="ltr" style="text-align:center;">@(branch.Phone ?? "—")</td>
+                            <td>
+                                @if (branch.IsActive)
+                                {
+                                    <span class="hb-badge hb-badge-success">نشط</span>
+                                }
+                                else
+                                {
+                                    <span class="hb-badge hb-badge-danger">معطل</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="action-btn edit" title="تعديل" disabled>
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button class="action-btn delete" title="حذف" disabled>
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@* ===== Add/Edit Modal ===== *@
+@if (_showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3><i class="bi bi-@(_editingBranch != null ? "pencil-square" : "plus-circle")"></i> @(_editingBranch != null ? "تعديل الفرع" : "إضافة فرع جديد")</h3>
+                <button class="modal-close" @onclick="CloseModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <EditForm Model="_model" OnValidSubmit="HandleSave" FormName="BranchForm">
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="hb-alert hb-alert-danger" style="margin-bottom:1rem;">
+                            <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+                        </div>
+                    }
+                    <div class="form-grid">
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">اسم الفرع *</label>
+                            <InputText @bind-Value="_model.NameAr" class="hb-form-control" placeholder="أدخل اسم الفرع" />
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الكود *</label>
+                            <InputText @bind-Value="_model.Code" class="hb-form-control" placeholder="مثال: BR-001" />
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">النوع *</label>
+                            <InputSelect @bind-Value="_model.BranchType" class="hb-form-control">
+                                @foreach (var type in Enum.GetValues<BranchType>())
+                                {
+                                    <option value="@type">@GetBranchTypeLabel(type)</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الفرع الرئيسي</label>
+                            <InputSelect @bind-Value="_model.ParentBranchId" class="hb-form-control">
+                                <option value="">-- بدون --</option>
+                                @foreach (var b in _branches.Where(b => _editingBranch == null || b.Id != _editingBranch.Id))
+                                {
+                                    <option value="@b.Id">@b.NameAr</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="hb-form-group full-width">
+                            <label class="hb-form-label">العنوان</label>
+                            <InputText @bind-Value="_model.Address" class="hb-form-control" placeholder="عنوان الفرع" />
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الهاتف</label>
+                            <InputText @bind-Value="_model.Phone" class="hb-form-control" placeholder="رقم الهاتف" />
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الحالة</label>
+                            <InputSelect @bind-Value="_model.IsActive" class="hb-form-control">
+                                <option value="true">نشط</option>
+                                <option value="false">معطل</option>
+                            </InputSelect>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-hb-primary" disabled="@_saving">
+                        @if (_saving)
+                        {
+                            <span class="hb-spinner" style="width:18px;height:18px;border-width:2px;"></span>
+                            <span>جاري الحفظ...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-lg"></i>
+                            <span>@(_editingBranch != null ? "تحديث" : "حفظ")</span>
+                        }
+                    </button>
+                    <button type="button" class="btn-hb-outline" @onclick="CloseModal">إلغاء</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@* ===== Delete Confirmation Modal ===== *@
+@if (_showDeleteModal)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-content modal-sm" @onclick:stopPropagation="true">
+            <div class="modal-header modal-header-danger">
+                <h3><i class="bi bi-exclamation-triangle"></i> تأكيد الحذف</h3>
+                <button class="modal-close" @onclick="CloseDeleteModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="hb-alert hb-alert-danger" style="margin-bottom:1rem;">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+                    </div>
+                }
+                <p class="delete-message">هل أنت متأكد من حذف الفرع <strong>@_deletingBranch?.NameAr</strong>؟</p>
+                <p class="delete-warning"><i class="bi bi-info-circle"></i> هذا الإجراء لا يمكن التراجع عنه.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-hb-danger" @onclick="HandleDelete" disabled="@_saving">
+                    @if (_saving)
+                    {
+                        <span class="hb-spinner" style="width:18px;height:18px;border-width:2px;"></span>
+                    }
+                    <i class="bi bi-trash3"></i> حذف
+                </button>
+                <button class="btn-hb-outline" @onclick="CloseDeleteModal">إلغاء</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Branch> _branches = [];
+    private bool _loading = true;
+    private int _headOfficeCount, _mainBranchCount, _branchCount, _officeCount;
+
+    // Modal state
+    private bool _showModal, _showDeleteModal, _saving;
+    private string? _successMessage, _errorMessage;
+    private Branch? _editingBranch;
+    private Branch? _deletingBranch;
+    private BranchFormModel _model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBranches();
+    }
+
+    private async Task LoadBranches()
+    {
+        _branches = await DbContext.Branches
+            .OrderBy(b => b.BranchType)
+            .ThenBy(b => b.NameAr)
+            .ToListAsync();
+
+        _headOfficeCount = _branches.Count(b => b.BranchType == BranchType.HeadOffice);
+        _mainBranchCount = _branches.Count(b => b.BranchType == BranchType.MainBranch);
+        _branchCount = _branches.Count(b => b.BranchType == BranchType.Branch);
+        _officeCount = _branches.Count(b => b.BranchType == BranchType.Office);
+        _loading = false;
+    }
+
+    // ===== Add =====
+    private void OpenAddModal()
+    {
+        _editingBranch = null;
+        _model = new();
+        _errorMessage = null;
+        _showModal = true;
+    }
+
+    // ===== Edit =====
+    private void OpenEditModal(Branch branch)
+    {
+        _editingBranch = branch;
+        _model = new BranchFormModel
+        {
+            NameAr = branch.NameAr,
+            Code = branch.Code,
+            BranchType = branch.BranchType,
+            Address = branch.Address,
+            Phone = branch.Phone,
+            ParentBranchId = branch.ParentBranchId?.ToString(),
+            IsActive = branch.IsActive
+        };
+        _errorMessage = null;
+        _showModal = true;
+    }
+
+    private async Task HandleSave()
+    {
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_model.NameAr) || string.IsNullOrWhiteSpace(_model.Code))
+            {
+                _errorMessage = "يرجى إدخال اسم الفرع والكود";
+                return;
+            }
+
+            if (_editingBranch != null)
+            {
+                // Update
+                _editingBranch.NameAr = _model.NameAr;
+                _editingBranch.Code = _model.Code;
+                _editingBranch.BranchType = _model.BranchType;
+                _editingBranch.Address = _model.Address;
+                _editingBranch.Phone = _model.Phone;
+                _editingBranch.ParentBranchId = string.IsNullOrEmpty(_model.ParentBranchId) ? null : Guid.Parse(_model.ParentBranchId);
+                _editingBranch.IsActive = _model.IsActive;
+                DbContext.Branches.Update(_editingBranch);
+                await DbContext.SaveChangesAsync();
+                _successMessage = $"تم تحديث الفرع «{_model.NameAr}» بنجاح";
+            }
+            else
+            {
+                // Add
+                var branch = new Branch
+                {
+                    Id = Guid.NewGuid(),
+                    NameAr = _model.NameAr,
+                    Code = _model.Code,
+                    BranchType = _model.BranchType,
+                    Address = _model.Address,
+                    Phone = _model.Phone,
+                    ParentBranchId = string.IsNullOrEmpty(_model.ParentBranchId) ? null : Guid.Parse(_model.ParentBranchId),
+                    IsActive = _model.IsActive
+                };
+                DbContext.Branches.Add(branch);
+                await DbContext.SaveChangesAsync();
+                _successMessage = $"تم إضافة الفرع «{_model.NameAr}» بنجاح";
+            }
+
+            _showModal = false;
+            await LoadBranches();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"حدث خطأ: {ex.Message}";
+        }
+        finally { _saving = false; }
+    }
+
+    private void CloseModal() { _showModal = false; _errorMessage = null; }
+
+    // ===== Delete =====
+    private void OpenDeleteModal(Branch branch)
+    {
+        _deletingBranch = branch;
+        _errorMessage = null;
+        _showDeleteModal = true;
+    }
+
+    private async Task HandleDelete()
+    {
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            DbContext.Branches.Remove(_deletingBranch!);
+            await DbContext.SaveChangesAsync();
+            _successMessage = $"تم حذف الفرع «{_deletingBranch!.NameAr}» بنجاح";
+            _showDeleteModal = false;
+            await LoadBranches();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.InnerException?.Message?.Contains("REFERENCE") == true
+                ? "لا يمكن حذف هذا الفرع لأنه مرتبط ببريد أو بيانات أخرى"
+                : $"حدث خطأ: {ex.Message}";
+        }
+        finally { _saving = false; }
+    }
+
+    private void CloseDeleteModal() { _showDeleteModal = false; _errorMessage = null; }
+
+    // ===== Helpers =====
+    private static string GetBranchTypeLabel(BranchType t) => t switch
+    {
+        BranchType.HeadOffice => "الإدارة العامة",
+        BranchType.MainBranch => "فرع رئيسي",
+        BranchType.Branch => "فرع",
+        BranchType.Office => "مكتب",
+        _ => t.ToString()
+    };
+
+    private static string GetBranchTypeBadge(BranchType t) => t switch
+    {
+        BranchType.HeadOffice => "hb-badge-primary",
+        BranchType.MainBranch => "hb-badge-gold",
+        BranchType.Branch => "hb-badge-success",
+        BranchType.Office => "hb-badge-secondary",
+        _ => ""
+    };
+
+    private static string GetBranchIcon(BranchType t) => t switch
+    {
+        BranchType.HeadOffice => "bi bi-bank2",
+        BranchType.MainBranch => "bi bi-building",
+        BranchType.Branch => "bi bi-shop",
+        BranchType.Office => "bi bi-geo-alt",
+        _ => "bi bi-building"
+    };
+
+    private class BranchFormModel
+    {
+        public string NameAr { get; set; } = "";
+        public string Code { get; set; } = "";
+        public BranchType BranchType { get; set; }
+        public string? Address { get; set; }
+        public string? Phone { get; set; }
+        public string? ParentBranchId { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

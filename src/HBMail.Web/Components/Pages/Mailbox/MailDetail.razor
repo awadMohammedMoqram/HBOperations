@@ -1,0 +1,1438 @@
+﻿@page "/mail/{Id:guid}"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using HBMail.Application.Common.Interfaces
+@using HBMail.Application.Workflow
+@using HBMail.Domain.Common
+@using HBMail.Domain.Enums
+@using HBMail.Domain.Entities
+@using HBMail.Infrastructure.Data
+@using HBMail.Infrastructure.Identity
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject ICurrentUserService CurrentUser
+@inject UserManager<ApplicationUser> UserManager
+@inject INotificationService NotificationService
+@inject NavigationManager Navigation
+@inject IFileStorageService FileStorage
+@inject IFileValidationService FileValidation
+@inject IPdfCompressionService PdfCompression
+@inject HBMail.Web.Services.NotificationEventService NotificationEvents
+@inject HBMail.Web.Services.ToastService Toast
+
+<PageTitle>تفاصيل البريد - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    @if (_loading)
+    {
+        <div class="hb-loading"><div class="hb-spinner"></div><span>جاري تحميل البيانات...</span></div>
+    }
+    else if (_transaction is null)
+    {
+        <div class="not-found">
+            <i class="bi bi-file-earmark-x"></i>
+            <h2>البريد غير موجودة أو ليس لديك صلاحية</h2>
+            <a href="/mail" class="btn-hb-primary"><i class="bi bi-arrow-right"></i> العودة للبريد</a>
+        </div>
+    }
+    else
+    {
+        var tx = _transaction;
+        var isSuperAdmin = CurrentUser.IsInRole("SuperAdmin");
+        var isOwnerEditable = tx.Status == MailStatus.Sent && (tx.CreatedByUserId == CurrentUser.UserId || tx.SenderUserId == CurrentUser.UserId);
+        var canAdminEdit = isSuperAdmin && tx.Status != MailStatus.Archived;
+        var canEdit = isOwnerEditable || canAdminEdit;
+
+        <!-- Page Header -->
+        <div class="page-title-section">
+            <div class="title-with-action">
+                <div>
+                    <h1 class="section-title">
+                        <i class="bi bi-file-earmark-text"></i>
+                        البريد: <span class="ref-number">@tx.ReferenceNumber</span>
+                    </h1>
+                    <p class="section-subtitle">@tx.Subject</p>
+                </div>
+                <div class="title-actions">
+                    @if (canEdit)
+                    {
+                        <a href="/mail/edit/@tx.Id" class="btn-hb-outline">
+                            <i class="bi bi-pencil-square"></i>
+                            @(canAdminEdit && !isOwnerEditable ? "تعديل إداري" : "تعديل")
+                        </a>
+                    }
+                    <a href="/mail" class="btn-hb-outline"><i class="bi bi-arrow-right"></i> العودة</a>
+                </div>
+            </div>
+        </div>
+
+        @if (tx.AdminEditedAt.HasValue)
+        {
+            <div class="admin-edit-banner" title="تعديل إداري">
+                <div class="aeb-icon"><i class="bi bi-shield-fill-exclamation"></i></div>
+                <div class="aeb-text">
+                    <strong>عُدِّلت هذا البريد من قبل مدير النظام</strong>
+                    <span class="aeb-meta">
+                        @if (!string.IsNullOrEmpty(tx.AdminEditedByName))
+                        {
+                            <span><i class="bi bi-person-badge"></i> @tx.AdminEditedByName</span>
+                        }
+                        <span><i class="bi bi-calendar2-event"></i> @AppTime.FormatYemen(tx.AdminEditedAt.Value)</span>
+                    </span>
+                </div>
+            </div>
+        }
+
+        @* === Banner: CC / إشعار المدير — للاطلاع فقط === *@
+        @if (_isCcOrReadOnly)
+        {
+            <div class="hb-alert hb-alert-info cc-readonly-banner">
+                <i class="bi bi-eye-fill"></i>
+                <span>أنت مذكور في نسخة هذا البريد <strong>(للاطلاع فقط)</strong> — لا يمكنك اتخاذ إجراءات.</span>
+            </div>
+        }
+
+        @* === عرض قائمة CC إن وُجدت === *@
+        @if (_ccNames.Any())
+        {
+            <div class="cc-recipients-bar">
+                <i class="bi bi-people"></i>
+                <span class="cc-label">نسخة إلى:</span>
+                <span class="cc-names">@string.Join("، ", _ccNames)</span>
+            </div>
+        }
+
+        <!-- Workflow Progress (مُرسَلة ──► موجه لموظف ──► مُستلَمة) -->
+        <div class="workflow-progress simple-flow">
+            @{
+                var isInTransit = tx.Status == MailStatus.AssignedToStaff;
+                var isReceived = tx.Status == MailStatus.Received || tx.Status == MailStatus.Archived;
+                var isReturned = tx.Status == MailStatus.Rejected;
+                var isTerminalAlt = isReturned;
+
+                // خط 1: Sent → AssignedToStaff
+                var line1State = (isInTransit || isReceived) ? "line-completed" : (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected) ? "line-terminal" : "line-pending");
+                // خط 2: AssignedToStaff → Received
+                var line2State = isReceived ? "line-completed" : (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.AssignedToStaff) ? "line-terminal" : "line-pending");
+            }
+
+            <!-- خطوة 1: مُرسَلة -->
+            <div class="workflow-step step-completed">
+                <div class="step-dot"><i class="bi bi-send-fill"></i></div>
+                <span class="step-label">تم الإرسال</span>
+                <span class="step-date"><i class="bi bi-clock"></i> @AppTime.FormatYemen(tx.SentAt)</span>
+                <div class="step-line @line1State"></div>
+            </div>
+
+            <!-- خطوة 2: تم التوجيه لموظف -->
+            @{
+                bool step2Done = isInTransit || isReceived;
+                bool step2Terminal = isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected);
+                string step2Class = step2Done ? "step-completed" : (step2Terminal ? "step-terminal" : (tx.Status == MailStatus.Sent ? "step-current" : "step-pending"));
+                string step2Icon = step2Done ? "bi-person-check" : (step2Terminal ? "bi-x-octagon-fill" : "bi-hourglass-split");
+                string step2Text = step2Done ? "تم التوجيه لموظف" : (step2Terminal ? "مرفوض" : "بانتظار المستلم");
+                string? step2Date = (step2Done && tx.AssignedAt.HasValue) ? AppTime.FormatYemen(tx.AssignedAt.Value) : (step2Terminal && tx.CompletedAt.HasValue) ? AppTime.FormatYemen(tx.CompletedAt.Value) : null;
+            }
+            <div class="workflow-step @step2Class">
+                <div class="step-dot"><i class="bi @step2Icon"></i></div>
+                <span class="step-label">@step2Text</span>
+                @if (!string.IsNullOrEmpty(step2Date))
+                {
+                    <span class="step-date"><i class="bi bi-clock"></i> @step2Date</span>
+                }
+                else if (!step2Terminal)
+                {
+                    <span class="step-date step-date-pending"><i class="bi bi-three-dots"></i> بانتظار الإجراء</span>
+                }
+                @if (step2Done || isInTransit)
+                {
+                    <div class="step-line @line2State"></div>
+                }
+            </div>
+
+            <!-- خطوة 3: مُستلَمة (إذا وصلت لمرحلة AssignedToStaff على الأقل أو Rejected من المستلم) -->
+            @if (step2Done || (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.AssignedToStaff)))
+            {
+                bool step3Terminal = isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.AssignedToStaff && h.ToStatus == MailStatus.Rejected);
+                string step3Class = isReceived ? "step-completed" : (step3Terminal ? "step-terminal" : "step-current");
+                string step3Icon = isReceived ? "bi-check-lg" : (step3Terminal ? "bi-x-octagon-fill" : "bi-hourglass-split");
+                string step3Text = isReceived ? "تم الاستلام" : (step3Terminal ? "مرفوضة (المستلم)" : "بانتظار المستلم");
+                string? step3Date = (isReceived && tx.ReceivedAt.HasValue) ? AppTime.FormatYemen(tx.ReceivedAt.Value)
+                    : (step3Terminal && tx.CompletedAt.HasValue) ? AppTime.FormatYemen(tx.CompletedAt.Value) : null;
+
+                <div class="workflow-step @step3Class">
+                    <div class="step-dot"><i class="bi @step3Icon"></i></div>
+                    <span class="step-label">@step3Text</span>
+                    @if (!string.IsNullOrEmpty(step3Date))
+                    {
+                        <span class="step-date"><i class="bi bi-clock"></i> @step3Date</span>
+                    }
+                    else
+                    {
+                        <span class="step-date step-date-pending"><i class="bi bi-three-dots"></i> بانتظار الإجراء</span>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-current">
+                <span class="status-badge-lg @GetStatusCssClass(tx.Status)">
+                    <i class="bi @GetStatusIcon(tx.Status)"></i>
+                    @GetStatusLabel(tx.Status)
+                </span>
+            </div>
+            <div class="status-meta">
+                <span><i class="bi bi-calendar3"></i> أُرسلت: @AppTime.FormatYemen(tx.SentAt)</span>
+                @if (tx.DueDate.HasValue)
+                {
+                    var due = tx.DueDate.Value;
+                    var isPending = tx.Status is MailStatus.Sent or MailStatus.AssignedToStaff;
+                    var isOverdue = isPending && due < AppTime.YemenNow;
+                    <span class="@(isOverdue ? "overdue-text" : "")">
+                        <i class="bi bi-alarm"></i> الاستحقاق: @AppTime.FormatYemen(due)
+                        @if (isOverdue) { <span class="overdue-badge">متأخرة</span> }
+                    </span>
+
+                    @* تقييم زمن التسليم بعد الاستلام *@
+                    @if (tx.ReceivedAt.HasValue)
+                    {
+                        var diff = tx.ReceivedAt.Value - due;
+                        var minutes = Math.Abs(diff.TotalMinutes);
+                        string when, badgeCls, icon;
+                        if (diff.TotalMinutes > 5)
+                        {
+                            badgeCls = "delivery-late";
+                            icon = "bi-exclamation-triangle-fill";
+                            when = $"تم التسليم متأخراً بـ {FormatDelay(minutes)}";
+                        }
+                        else if (diff.TotalMinutes < -5)
+                        {
+                            badgeCls = "delivery-early";
+                            icon = "bi-check-circle-fill";
+                            when = $"تم التسليم مبكراً بـ {FormatDelay(minutes)}";
+                        }
+                        else
+                        {
+                            badgeCls = "delivery-on-time";
+                            icon = "bi-check2-circle";
+                            when = "تم التسليم في الموعد المحدد";
+                        }
+                        <span class="delivery-badge @badgeCls" title="مقارنةً بتاريخ الاستحقاق">
+                            <i class="bi @icon"></i> @when
+                        </span>
+                    }
+                }
+            </div>
+        </div>
+
+        <!-- Action cards moved to bottom of page -->
+
+        <!-- Reject confirmation dialog -->
+        @if (_showRejectDialog)
+        {
+            <div class="modal-overlay" @onclick="CloseRejectDialog">
+                <div class="modal-content modal-md" @onclick:stopPropagation="true">
+                    <div class="modal-header modal-header-warning">
+                        <h3><i class="bi bi-x-octagon"></i> رفض البريد</h3>
+                        <button class="modal-close" @onclick="CloseRejectDialog"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>سيتم رفض هذا البريد وإشعار المرسل. لا يمكن التراجع.</p>
+                        <label class="hb-form-label">سبب الرفض <span class="required-star">*</span></label>
+                        <textarea class="hb-form-control note-textarea" rows="6" maxlength="1000"
+                                  placeholder="اشرح للمرسل سبب رفض البريد..."
+                                  @bind="_rejectionNote"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-hb-outline" @onclick="CloseRejectDialog" disabled="@_processing">إلغاء</button>
+                        <button class="btn-hb-danger" @onclick="ConfirmReject"
+                                disabled="@(_processing || string.IsNullOrWhiteSpace(_rejectionNote))">
+                            @if (_processing) { <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span> }
+                            تأكيد الرفض
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Cancel (delete) confirmation dialog -->
+        @if (_showCancelDialog)
+        {
+            <div class="modal-overlay" @onclick="CloseCancelDialog">
+                <div class="modal-content modal-md" @onclick:stopPropagation="true">
+                    <div class="modal-header modal-header-danger">
+                        <h3><i class="bi bi-trash"></i> إلغاء وحذف البريد</h3>
+                        <button class="modal-close" @onclick="CloseCancelDialog"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="hb-alert hb-alert-danger" style="margin-bottom:1rem;">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            تحذير: سيتم حذف البريد ومرفقاتها وإشعاراتها <strong>نهائياً</strong>. لا يمكن التراجع.
+                        </div>
+                        <label class="hb-form-label">سبب الإلغاء <span class="required-star">*</span></label>
+                        <textarea class="hb-form-control note-textarea" rows="6" maxlength="1000"
+                                  placeholder="اذكر سبب إلغاء البريد (للسجل التدقيقي)..."
+                                  @bind="_cancellationNote"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-hb-outline" @onclick="CloseCancelDialog" disabled="@_processing">تراجع</button>
+                        <button class="btn-hb-danger" @onclick="ConfirmCancel"
+                                disabled="@(_processing || string.IsNullOrWhiteSpace(_cancellationNote))">
+                            @if (_processing) { <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span> }
+                            تأكيد الإلغاء والحذف
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Rejection notice (when status is Rejected) -->
+        @if (tx.Status == MailStatus.Rejected)
+        {
+            var rejectedFromSent = tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected);
+            var rejectorLabel = rejectedFromSent ? "الشؤون الإدارية" : "المستلم";
+            <div class="hb-alert hb-alert-danger rejection-notice">
+                <div class="rejection-header">
+                    <i class="bi bi-x-octagon-fill"></i>
+                    <strong>تم رفض البريد من قبل @rejectorLabel</strong>
+                </div>
+            </div>
+        }
+
+        <!-- Info Cards Grid -->
+        <div class="detail-grid">
+            <!-- Main Info -->
+            <div class="hb-card detail-card">
+                <h3 class="card-section-title"><i class="bi bi-info-circle"></i> معلومات البريد</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">رقم المرجع</span>
+                        <span class="info-value ref-mono">@tx.ReferenceNumber</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">النوع</span>
+                        <span class="info-value">@GetTypeLabel(tx.Type)</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">الأولوية</span>
+                        <span class="info-value">
+                            <span class="priority-dot @GetPriorityClass(tx.Priority)"></span>
+                            @GetPriorityLabel(tx.Priority)
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">تاريخ الإنشاء</span>
+                        <span class="info-value">@AppTime.FormatYemen(tx.CreatedAt)</span>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(tx.Description))
+                {
+                    <div class="description-block">
+                        <span class="info-label">الوصف</span>
+                        <p>@tx.Description</p>
+                    </div>
+                }
+            </div>
+
+            <!-- Sender / Receiver -->
+            <div class="hb-card detail-card">
+                <h3 class="card-section-title"><i class="bi bi-arrow-left-right"></i> المرسل والمستلِم</h3>
+                <div class="sender-receiver">
+                    <div class="sr-box sr-sender">
+                        <div class="sr-icon"><i class="bi bi-arrow-up-left-circle"></i></div>
+                        <h4>المرسل</h4>
+                        <p class="sr-branch">@(tx.SenderBranch?.NameAr ?? "—")</p>
+                        @if (tx.SenderDepartment != null)
+                        {
+                            <p class="sr-dept">@tx.SenderDepartment.NameAr</p>
+                        }
+                        @if (!string.IsNullOrEmpty(_senderName))
+                        {
+                            <p class="sr-user"><i class="bi bi-person"></i> @_senderName</p>
+                        }
+                    </div>
+                    <div class="sr-arrow"><i class="bi bi-arrow-left"></i></div>
+                    <div class="sr-box sr-receiver">
+                        <div class="sr-icon"><i class="bi bi-arrow-down-right-circle"></i></div>
+                        <h4>المستلِم</h4>
+                        <p class="sr-branch">@(tx.ReceiverBranch?.NameAr ?? "—")</p>
+                        @if (tx.ReceiverDepartment != null)
+                        {
+                            <p class="sr-dept">@tx.ReceiverDepartment.NameAr</p>
+                        }
+                        @if (!string.IsNullOrEmpty(_receiverName))
+                        {
+                            <p class="sr-user"><i class="bi bi-person"></i> @_receiverName</p>
+                        }
+                        @if (!string.IsNullOrEmpty(_receivedByName) && _receivedByName != _receiverName)
+                        {
+                            <p class="sr-user sr-confirmed-by"><i class="bi bi-person-check"></i> أكّد بواسطة: @_receivedByName</p>
+                        }
+                    </div>
+                </div>
+                <div class="dates-row">
+                    <div class="date-item"><span class="info-label">تاريخ الإرسال</span><span>@AppTime.FormatYemen(tx.SentAt)</span></div>
+                    @if (tx.ReceivedAt.HasValue)
+                    {
+                        <div class="date-item"><span class="info-label">تاريخ الاستلام</span><span>@AppTime.FormatYemen(tx.ReceivedAt.Value)</span></div>
+                    }
+                    @if (tx.CompletedAt.HasValue && tx.Status != MailStatus.Received)
+                    {
+                        <div class="date-item"><span class="info-label">تاريخ الإنجاز</span><span>@AppTime.FormatYemen(tx.CompletedAt.Value)</span></div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Notes Card (sender/receiver/rejection) -->
+        @if (!string.IsNullOrEmpty(tx.SenderNote) || !string.IsNullOrEmpty(tx.ReceiverNote) || !string.IsNullOrEmpty(tx.RejectionNote))
+        {
+            <div class="hb-card detail-card notes-card">
+                <h3 class="card-section-title"><i class="bi bi-chat-left-text"></i> ملاحظات الأطراف</h3>
+                <div class="party-notes-grid">
+                    @if (!string.IsNullOrEmpty(tx.SenderNote))
+                    {
+                        <div class="party-note party-note-sender">
+                            <div class="party-note-head">
+                                <i class="bi bi-arrow-up-left-circle"></i>
+                                <span>ملاحظة المرسل</span>
+                            </div>
+                            <p class="party-note-body">@tx.SenderNote</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(tx.ReceiverNote))
+                    {
+                        <div class="party-note party-note-receiver">
+                            <div class="party-note-head">
+                                <i class="bi bi-arrow-down-right-circle"></i>
+                                <span>ملاحظة المستلم</span>
+                            </div>
+                            <p class="party-note-body">@tx.ReceiverNote</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(tx.RejectionNote))
+                    {
+                        <div class="party-note party-note-rejection">
+                            <div class="party-note-head">
+                                <i class="bi bi-x-octagon-fill"></i>
+                                <span>سبب الرفض</span>
+                            </div>
+                            <p class="party-note-body">@tx.RejectionNote</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Documents -->
+        <div class="hb-card detail-card">
+            <h3 class="card-section-title">
+                <i class="bi bi-paperclip"></i> المرفقات المرفقة (@tx.Attachments.Count)
+            </h3>
+
+            @if (tx.Attachments.Any())
+            {
+                <div class="documents-list">
+                    @foreach (var doc in tx.Attachments.OrderByDescending(d => d.UploadedAt))
+                    {
+                        var isSenderDoc = doc.UploadedByUserId == tx.SenderUserId || doc.UploadedByUserId == tx.CreatedByUserId;
+                        var uploaderClass = isSenderDoc ? "doc-uploader-sender" : "doc-uploader-receiver";
+                        var uploaderIcon  = isSenderDoc ? "bi-arrow-up-left-circle-fill" : "bi-arrow-down-right-circle-fill";
+                        var uploaderLabel = isSenderDoc ? "رفعه المرسل" : "رفعه المستلم";
+                        <div class="doc-item @uploaderClass">
+                            <div class="doc-icon"><i class="bi bi-file-earmark-pdf"></i></div>
+                            <div class="doc-info">
+                                <div class="doc-name-row">
+                                    <span class="doc-name">@doc.OriginalFileName</span>
+                                    <span class="doc-uploader-badge @uploaderClass">
+                                        <i class="bi @uploaderIcon"></i> @uploaderLabel
+                                    </span>
+                                </div>
+                                <span class="doc-meta">
+                                    @GetDocTypeName(doc.AttachmentType) — @FormatFileSize(doc.FileSizeBytes) — v@(doc.Version)
+                                </span>
+                            </div>
+                            <span class="doc-date">@AppTime.FormatYemen(doc.UploadedAt, "yyyy/MM/dd")</span>
+                            <div class="doc-actions">
+                                <button class="doc-action-btn" title="معاينة" @onclick="() => PreviewDocument(doc.Id)">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <a href="/api/documents/@doc.Id/download" target="_blank" class="doc-action-btn" title="تحميل">
+                                    <i class="bi bi-download"></i>
+                                </a>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="empty-text">لا توجد مرفقات مرفقة</p>
+            }
+        </div>
+
+        <!-- PDF Preview Modal -->
+        @if (_previewDocId.HasValue)
+        {
+            var previewDoc = tx.Attachments.FirstOrDefault(d => d.Id == _previewDocId);
+            <div class="modal-overlay" @onclick="ClosePreview" @onkeydown="HandlePreviewKeyDown" tabindex="0">
+                <div class="modal-content pdf-modal @(_pdfFullscreen ? "pdf-fullscreen" : "")" @onclick:stopPropagation="true">
+                    <div class="modal-header pdf-header">
+                        <div class="pdf-header-info">
+                            <i class="bi bi-file-earmark-pdf pdf-icon-lg"></i>
+                            <div>
+                                <h3>@(previewDoc?.OriginalFileName ?? "معاينة المستند")</h3>
+                                @if (previewDoc is not null)
+                                {
+                                    <span class="pdf-meta-text">@GetDocTypeName(previewDoc.AttachmentType) — @FormatFileSize(previewDoc.FileSizeBytes)</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="pdf-toolbar">
+                            <a href="/api/documents/@_previewDocId/download" target="_blank" class="pdf-tool-btn" title="تحميل">
+                                <i class="bi bi-download"></i>
+                            </a>
+                            <button class="pdf-tool-btn" @onclick="TogglePdfFullscreen" title="ملء الشاشة">
+                                <i class="bi @(_pdfFullscreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                            </button>
+                            <button class="modal-close" @onclick="ClosePreview" title="إغلاق (Esc)">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="modal-body pdf-body">
+                        <div class="pdf-loading-overlay" id="pdfLoader">
+                            <div class="hb-spinner"></div>
+                            <span>جاري التحميل...</span>
+                        </div>
+                        <iframe src="/api/documents/@_previewDocId/preview" class="pdf-frame" onload="document.getElementById('pdfLoader').style.display='none'"></iframe>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Action Buttons -->
+        @if (_allowedTransitions.Contains(MailStatus.AssignedToStaff)
+             || _allowedTransitions.Contains(MailStatus.Received)
+             || _allowedTransitions.Contains(MailStatus.Rejected)
+             || _allowedTransitions.Contains(MailStatus.Archived)
+             || MailStateMachine.CanDelete(tx, CurrentUser.UserId))
+        {
+            var canAssign  = _allowedTransitions.Contains(MailStatus.AssignedToStaff);
+            var canReceive = _allowedTransitions.Contains(MailStatus.Received);
+            var canReject  = _allowedTransitions.Contains(MailStatus.Rejected);
+            var canArchive = _allowedTransitions.Contains(MailStatus.Archived);
+            var canDelete  = MailStateMachine.CanDelete(tx, CurrentUser.UserId);
+
+            @* === عرض المستلم: استلام / توجيه / رفض === *@
+            @if (canReceive || canReject || canAssign)
+            {
+                <div class="hb-card action-card action-card-receiver">
+                    <h3 class="card-section-title"><i class="bi bi-lightning-fill"></i> الإجراءات المتاحة</h3>
+                    <p class="action-role-hint">
+                        <i class="bi bi-person-check"></i>
+                        أنت <strong>المستلم</strong> لهذا البريد. اختر:
+                        <strong>تأكيد الاستلام</strong> للقبول،
+                        @if (canAssign) { <text><strong>توجيه لموظف</strong>،</text> }
+                        أو <strong>رفض</strong> مع توضيح السبب.
+                    </p>
+
+                    @if (canReceive)
+                    {
+                        <div class="action-receipt-stack">
+                            <div class="action-receipt-time">
+                                <label class="hb-form-label">
+                                    <i class="bi bi-clock-history"></i> وقت الاستلام <span class="required-star">*</span>
+                                </label>
+                                <input type="datetime-local" class="hb-form-control"
+                                       value="@_actualReceivedAt.ToString("yyyy-MM-ddTHH:mm")"
+                                       @onchange="OnReceivedAtChanged" />
+                            </div>
+
+                            <div class="action-note-input">
+                                <label class="hb-form-label">ملاحظة (اختياري)</label>
+                                <textarea class="hb-form-control note-textarea" rows="3" maxlength="1000"
+                                          placeholder="أي ملاحظة عند الاستلام..."
+                                          @bind="_receiverNote"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="workflow-actions">
+                            <button class="workflow-btn workflow-btn-success"
+                                    @onclick="ConfirmReceive" disabled="@_processing">
+                                @if (_processing) { <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span> }
+                                else { <i class="bi bi-check2-all"></i> }
+                                تأكيد الاستلام
+                            </button>
+                        </div>
+                    }
+
+                    @if (canAssign)
+                    {
+                        <hr class="action-separator" />
+                        <div class="action-receipt-stack">
+                            <div class="action-note-input">
+                                <label class="hb-form-label"><i class="bi bi-person-plus"></i> توجيه لموظف</label>
+                                <select class="hb-form-control" @bind="_assignToStaffUserId">
+                                    <option value="">— اختر موظفاً —</option>
+                                    @if (_departmentStaff != null)
+                                    {
+                                        @foreach (var staff in _departmentStaff)
+                                        {
+                                            <option value="@staff.Id">@staff.FullNameAr</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                            <div class="action-note-input">
+                                <label class="hb-form-label">ملاحظة التوجيه (اختياري)</label>
+                                <textarea class="hb-form-control note-textarea" rows="2" maxlength="1000"
+                                          placeholder="تعليمات للموظف..."
+                                          @bind="_assignNote"></textarea>
+                            </div>
+                        </div>
+                        <div class="workflow-actions">
+                            <button class="workflow-btn workflow-btn-primary"
+                                    @onclick="ConfirmAssignToStaff" disabled="@_processing">
+                                @if (_processing) { <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span> }
+                                else { <i class="bi bi-person-check"></i> }
+                                توجيه للموظف
+                            </button>
+                        </div>
+                    }
+
+                    @if (canReject)
+                    {
+                        <hr class="action-separator" />
+                        <div class="workflow-actions">
+                            <button class="workflow-btn workflow-btn-warning"
+                                    @onclick="OpenRejectDialog" disabled="@_processing">
+                                <i class="bi bi-x-octagon"></i> رفض البريد
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+
+            @* === عرض المرسل: إلغاء === *@
+            @if (canDelete)
+            {
+                <div class="hb-card sender-cancel-card">
+                    <div class="scc-content">
+                        <div class="scc-icon"><i class="bi bi-hourglass-split"></i></div>
+                        <div class="scc-text">
+                            <h4>البريد بانتظار استلام الشؤون الإدارية</h4>
+                            <p>بصفتك <strong>المرسل</strong>، يمكنك سحب البريد وإلغاءها ما دامت لم تُستلم من الشؤون الإدارية بعد.
+                               الإلغاء يحذف البريد ومرفقاتها وإشعاراتها <strong>نهائياً</strong>.</p>
+                        </div>
+                        <button class="btn-hb-outline-danger scc-btn"
+                                @onclick="OpenCancelDialog" disabled="@_processing">
+                            <i class="bi bi-trash3"></i> سحب وإلغاء البريد
+                        </button>
+                    </div>
+                </div>
+            }
+
+            @* === صلاحية إدارية: أرشفة === *@
+            @if (canArchive)
+            {
+                <div class="hb-card action-card action-card-admin">
+                    <h3 class="card-section-title"><i class="bi bi-archive"></i> إجراءات إدارية</h3>
+                    <p class="action-role-hint"><i class="bi bi-shield-lock"></i> صلاحية إدارية لأرشفة البريد النهائية.</p>
+                    <div class="workflow-actions">
+                        <button class="workflow-btn workflow-btn-secondary"
+                                @onclick="ArchiveTransaction" disabled="@_processing">
+                            <i class="bi bi-archive"></i> أرشفة
+                        </button>
+                    </div>
+                </div>
+            }
+        }
+
+        <!-- History Timeline removed by request: dates already shown above -->
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    [SupplyParameterFromQuery(Name = "success")] public string? InitialSuccess { get; set; }
+
+    private Mail? _transaction;
+    private bool _loading = true;
+    private bool _processing;
+    private bool _uploadingFile;
+    private string? _senderName, _receiverName, _receivedByName, _assignedByName;
+    private string? _receiverNote;
+    private DateTime _actualReceivedAt = AppTime.YemenNow;
+
+    private void OnReceivedAtChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+            _actualReceivedAt = dt;
+    }
+    private string? _rejectionNote;
+    private string? _cancellationNote;
+    private bool _showRejectDialog;
+    private bool _showCancelDialog;
+    private IReadOnlyCollection<MailStatus> _allowedTransitions = [];
+    private readonly MailStateMachine _stateMachine = new();
+    private Guid? _previewDocId;
+    private bool _pdfFullscreen;
+    private Guid _adminAffairsDeptId;
+    private bool _isCcOrReadOnly;
+    private List<string> _ccNames = [];
+
+    // حقول توجيه لموظف (AssignToStaff)
+    private Guid? _assignToStaffUserId;
+    private string? _assignNote;
+    private List<HBMail.Infrastructure.Identity.ApplicationUser>? _departmentStaff;
+    private string? _adminNote;
+
+    private readonly List<PendingFile> _pendingReceiverFiles = new();
+    private const int MaxReceiverFiles = 1;
+    private const long MaxReceiverOriginalBytes = 20L * 1024 * 1024;
+    private const long MaxReceiverCompressedBytes = 5L * 1024 * 1024;
+
+    private long ReceiverPendingTotalBytes => _pendingReceiverFiles.Sum(f => f.Size);
+
+    private async Task HandleReceiverFilesSelected(InputFileChangeEventArgs e)
+    {
+        _uploadingFile = true;
+        StateHasChanged();
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(MaxReceiverFiles))
+            {
+                if (_pendingReceiverFiles.Count >= MaxReceiverFiles)
+                {
+                    await Toast.ShowWarningAsync("الحد الأقصى", "يُسمح برفع ملف واحد فقط لكل مستخدم.");
+                    break;
+                }
+                var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+                if (ext != ".pdf")
+                {
+                    await Toast.ShowWarningAsync("نوع غير مسموح", $"الملف '{file.Name}' غير مدعوم — يُقبل PDF فقط.");
+                    continue;
+                }
+                if (file.Size > MaxReceiverOriginalBytes)
+                {
+                    await Toast.ShowWarningAsync("تجاوز الحجم", $"حجم '{file.Name}' أكبر من 20 ميجا. يجب تصغيره قبل الرفع.");
+                    continue;
+                }
+                try
+                {
+                    using var ms = new MemoryStream();
+                    await file.OpenReadStream(MaxReceiverOriginalBytes).CopyToAsync(ms);
+                    _pendingReceiverFiles.Add(new PendingFile
+                    {
+                        Name = file.Name,
+                        ContentType = string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType,
+                        Size = file.Size,
+                        Data = ms.ToArray()
+                    });
+                }
+                catch (Exception ex)
+                {
+                    await Toast.ShowErrorAsync("تعذّر قراءة الملف", ex.Message);
+                }
+            }
+        }
+        finally
+        {
+            _uploadingFile = false;
+        }
+    }
+
+    private void RemoveReceiverPendingFile(int index)
+    {
+        if (index >= 0 && index < _pendingReceiverFiles.Count)
+            _pendingReceiverFiles.RemoveAt(index);
+    }
+
+    private void ClearReceiverPendingFiles() => _pendingReceiverFiles.Clear();
+
+    private static string GetFileIcon(string name)
+    {
+        var ext = Path.GetExtension(name).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => "bi-file-earmark-pdf",
+            ".doc" or ".docx" => "bi-file-earmark-word",
+            ".xls" or ".xlsx" => "bi-file-earmark-excel",
+            ".png" or ".jpg" or ".jpeg" or ".gif" => "bi-file-earmark-image",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024):F1} MB";
+    }
+
+    private class PendingFile
+    {
+        public string Name { get; set; } = "";
+        public string ContentType { get; set; } = "";
+        public long Size { get; set; }
+        public byte[] Data { get; set; } = Array.Empty<byte>();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadTransaction();
+        if (!string.IsNullOrEmpty(InitialSuccess))
+            await Toast.ShowSuccessAsync(InitialSuccess);
+        await MarkRelatedNotificationsRead();
+        _loading = false;
+    }
+
+    private async Task MarkRelatedNotificationsRead()
+    {
+        if (_transaction is null || CurrentUser.UserId == Guid.Empty) return;
+        try
+        {
+            // إذا كان المستخدم من الشؤون الإدارية — مزامنة القراءة لكل الفريق
+            if (_adminAffairsDeptId != Guid.Empty && CurrentUser.DepartmentId == _adminAffairsDeptId)
+            {
+                await NotificationService.MarkTeamNotificationsReadAsync(
+                    _adminAffairsDeptId, _transaction.Id, CurrentUser.UserId);
+                await NotificationEvents.RaiseRefreshAsync(CurrentUser.UserId);
+                return;
+            }
+
+            using var db = await DbFactory.CreateDbContextAsync();
+            var unread = await db.Notifications
+                .Where(n => n.UserId == CurrentUser.UserId
+                            && n.MailId == _transaction.Id
+                            && !n.IsRead)
+                .ToListAsync();
+            if (unread.Count == 0) return;
+
+            var now = DateTime.UtcNow;
+            foreach (var n in unread)
+            {
+                n.IsRead = true;
+                n.ReadAt = now;
+            }
+            await db.SaveChangesAsync();
+            await NotificationEvents.RaiseRefreshAsync(CurrentUser.UserId);
+        }
+        catch { /* don't block page on notification cleanup */ }
+    }
+
+    private async Task ReloadTransaction()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+
+        // تحميل GUID إدارة الشؤون الإدارية
+        if (_adminAffairsDeptId == Guid.Empty)
+        {
+            var adminDept = await db.Departments.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Code == MailStateMachine.AdminAffairsDeptCode);
+            _adminAffairsDeptId = adminDept?.Id ?? Guid.Empty;
+        }
+
+        _transaction = await db.Mails
+            .AsNoTracking()
+            .Include(t => t.SenderBranch)
+            .Include(t => t.ReceiverBranch)
+            .Include(t => t.SenderDepartment)
+            .Include(t => t.ReceiverDepartment)
+            .Include(t => t.Attachments)
+            .Include(t => t.History)
+            .Include(t => t.Notes)
+            .FirstOrDefaultAsync(t => t.Id == Id);
+
+        if (_transaction is null) return;
+
+        if (!HasAccess(_transaction))
+        {
+            _transaction = null;
+            return;
+        }
+
+        _allowedTransitions = _stateMachine.GetContextualTransitions(
+            _transaction, CurrentUser.UserId, CurrentUser.BranchId, CurrentUser.DepartmentId,
+            CurrentUser.Roles, _adminAffairsDeptId);
+
+        var sender = await UserManager.FindByIdAsync(_transaction.SenderUserId.ToString());
+        _senderName = sender?.FullNameAr;
+
+        if (_transaction.ReceiverUserId.HasValue)
+        {
+            var receiver = await UserManager.FindByIdAsync(_transaction.ReceiverUserId.Value.ToString());
+            _receiverName = receiver?.FullNameAr;
+        }
+
+        if (_transaction.ReceivedByUserId.HasValue)
+        {
+            var rcv = await UserManager.FindByIdAsync(_transaction.ReceivedByUserId.Value.ToString());
+            _receivedByName = rcv?.FullNameAr;
+        }
+
+        if (_transaction.AssignedByUserId.HasValue)
+        {
+            var ab = await UserManager.FindByIdAsync(_transaction.AssignedByUserId.Value.ToString());
+            _assignedByName = ab?.FullNameAr;
+        }
+
+        // Load department staff for assign-to-staff dropdown
+        if (MailStateMachine.IsManager(CurrentUser.Roles) && CurrentUser.DepartmentId.HasValue)
+        {
+            _departmentStaff = await UserManager.Users
+                .Where(u => u.DepartmentId == CurrentUser.DepartmentId && u.Id != CurrentUser.UserId && u.IsActive)
+                .OrderBy(u => u.FullNameAr)
+                .ToListAsync();
+        }
+
+        // Load CC info
+        var ccRecords = await db.MailCCs.AsNoTracking()
+            .Where(cc => cc.MailId == _transaction.Id)
+            .ToListAsync();
+        var ccUserIds = ccRecords.Select(cc => cc.UserId).ToList();
+        _isCcOrReadOnly = ccUserIds.Contains(CurrentUser.UserId)
+            || MailStateMachine.CanViewReadOnly(_transaction, CurrentUser.UserId);
+        if (ccUserIds.Count > 0)
+        {
+            var ccUsers = await UserManager.Users.Where(u => ccUserIds.Contains(u.Id)).ToListAsync();
+            _ccNames = ccUsers.Select(u => u.FullNameAr).ToList();
+        }
+
+        StateHasChanged();
+    }
+
+    private bool HasAccess(Mail mail)
+    {
+        if (MailStateMachine.HasGlobalAccess(CurrentUser.Roles)) return true;
+        if (MailStateMachine.IsSender(mail, CurrentUser.UserId)) return true;
+        if (MailStateMachine.IsAuthorizedReceiver(mail, CurrentUser.UserId, CurrentUser.BranchId, CurrentUser.DepartmentId)) return true;
+        if (MailStateMachine.CanViewReadOnly(mail, CurrentUser.UserId)) return true;
+        if (_isCcOrReadOnly) return true;
+        // Sender's branch members can view
+        if (mail.SenderBranchId.HasValue && CurrentUser.BranchId == mail.SenderBranchId) return true;
+        return false;
+    }
+
+    private async Task<Result> ExecuteAssignToStaffAsync()
+    {
+        if (_transaction is null) return Result.Failure("البريد غير محمل");
+        if (!_assignToStaffUserId.HasValue || _assignToStaffUserId == Guid.Empty)
+            return Result.Failure("يجب اختيار موظف");
+
+        using var db = await DbFactory.CreateDbContextAsync();
+        var fresh = await db.Mails
+            .Include(t => t.History)
+            .FirstOrDefaultAsync(t => t.Id == _transaction.Id);
+
+        if (fresh is null) return Result.Failure("البريد غير موجود");
+
+        var result = _stateMachine.AssignToStaff(
+            fresh, CurrentUser.UserId, _assignToStaffUserId.Value, _assignNote);
+
+        if (!result.IsSuccess) return result;
+        await db.SaveChangesAsync();
+        return Result.Success();
+    }
+
+    private async Task<Result> ExecuteConfirmReceiptAsync()
+    {
+        if (_transaction is null) return Result.Failure("البريد غير محملة");
+        using var db = await DbFactory.CreateDbContextAsync();
+        var fresh = await db.Mails
+            .Include(t => t.Attachments)
+            .Include(t => t.History)
+            .FirstOrDefaultAsync(t => t.Id == _transaction.Id);
+
+        if (fresh is null) return Result.Failure("البريد غير موجودة");
+
+        var result = _stateMachine.ConfirmReceipt(
+            fresh, CurrentUser.UserId, CurrentUser.BranchId, CurrentUser.DepartmentId,
+            _receiverNote, _actualReceivedAt);
+
+        if (!result.IsSuccess) return result;
+        await db.SaveChangesAsync();
+        return Result.Success();
+    }
+
+    private async Task<Result> ExecuteRejectAsync(string rejectionReason)
+    {
+        if (_transaction is null) return Result.Failure("البريد غير محملة");
+        using var db = await DbFactory.CreateDbContextAsync();
+        var fresh = await db.Mails
+            .Include(t => t.History)
+            .FirstOrDefaultAsync(t => t.Id == _transaction.Id);
+
+        if (fresh is null) return Result.Failure("البريد غير موجودة");
+
+        var result = _stateMachine.Reject(
+            fresh, CurrentUser.UserId, CurrentUser.BranchId, CurrentUser.DepartmentId,
+            rejectionReason);
+
+        if (!result.IsSuccess) return result;
+        await db.SaveChangesAsync();
+        return Result.Success();
+    }
+
+    private async Task<Result> ExecuteArchiveAsync()
+    {
+        if (_transaction is null) return Result.Failure("البريد غير محملة");
+        using var db = await DbFactory.CreateDbContextAsync();
+        var fresh = await db.Mails
+            .Include(t => t.History)
+            .FirstOrDefaultAsync(t => t.Id == _transaction.Id);
+
+        if (fresh is null) return Result.Failure("البريد غير موجودة");
+
+        var result = _stateMachine.Archive(fresh, CurrentUser.UserId, CurrentUser.Roles);
+        if (!result.IsSuccess) return result;
+        await db.SaveChangesAsync();
+        return Result.Success();
+    }
+
+    private async Task NotifySenderAsync(string referenceNumber, Guid txId, Guid senderUserId, string title, string message)
+    {
+        if (senderUserId == CurrentUser.UserId) return;
+        try
+        {
+            await NotificationService.NotifyUserAsync(
+                senderUserId, title, message, txId, NotificationType.MailStatusChanged);
+        }
+        catch { /* notification failure must not block action */ }
+    }
+
+    private async Task NotifyCcAndManagerAsync(string title, string message, NotificationType type)
+    {
+        if (_transaction is null) return;
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+            var ccUserIds = await db.MailCCs.AsNoTracking()
+                .Where(cc => cc.MailId == _transaction.Id)
+                .Select(cc => cc.UserId)
+                .ToListAsync();
+
+            // Notify CC users
+            foreach (var ccId in ccUserIds.Where(id => id != CurrentUser.UserId))
+            {
+                try { await NotificationService.NotifyUserAsync(ccId, title, message, _transaction.Id, type); } catch { }
+            }
+
+            // Notify manager (AssignedByUserId or ManagerNotifiedUserId)
+            var managerId = _transaction.AssignedByUserId ?? _transaction.ManagerNotifiedUserId;
+            if (managerId.HasValue && managerId.Value != CurrentUser.UserId && !ccUserIds.Contains(managerId.Value))
+            {
+                try { await NotificationService.NotifyUserAsync(managerId.Value, title, message, _transaction.Id, type); } catch { }
+            }
+        }
+        catch { }
+    }
+
+    // ====================== توجيه لموظف (AssignToStaff) ======================
+    private async Task ConfirmAssignToStaff()
+    {
+        if (_transaction is null) return;
+        if (!_assignToStaffUserId.HasValue || _assignToStaffUserId == Guid.Empty)
+        {
+            await Toast.ShowWarningAsync("حقل مطلوب", "يجب اختيار موظف لتوجيه البريد إليه.");
+            return;
+        }
+
+        _processing = true;
+        try
+        {
+            var result = await ExecuteAssignToStaffAsync();
+            if (!result.IsSuccess)
+            {
+                await Toast.ShowErrorAsync("تعذّر التوجيه", result.Error);
+                return;
+            }
+
+            await Toast.ShowSuccessAsync("تم توجيه البريد للموظف بنجاح");
+
+            // إشعار الموظف المُوجَّه إليه
+            if (_assignToStaffUserId.HasValue)
+            {
+                try
+                {
+                    await NotificationService.NotifyUserAsync(
+                        _assignToStaffUserId.Value,
+                        $"بريد موجّه إليك: {_transaction.ReferenceNumber}",
+                        $"تم توجيه البريد '{_transaction.Subject}' إليك.",
+                        _transaction.Id, NotificationType.MailAssigned);
+                }
+                catch { }
+            }
+
+            // إشعار المرسل
+            await NotifySenderAsync(_transaction.ReferenceNumber, _transaction.Id, _transaction.SenderUserId,
+                $"تم توجيه البريد {_transaction.ReferenceNumber}",
+                "تم توجيه بريدك لموظف مختص.");
+
+            _assignToStaffUserId = null;
+            _assignNote = null;
+            await ReloadTransaction();
+        }
+        catch (Exception ex) { await Toast.ShowErrorAsync("حدث خطأ", ex.Message); }
+        finally { _processing = false; }
+    }
+
+    // ====================== تأكيد الاستلام ======================
+    private async Task ConfirmReceive()
+    {
+        if (_transaction is null) return;
+
+        // تحقق من اشتراط المرفقات (لو مطلوب ولم يرفع المستلم أي مستند سابقاً ولم يختر شيئاً الآن)
+        if (_transaction.RequireReceiverDocument)
+        {
+            var hasPreviousDocs = _transaction.Attachments.Any(d => d.UploadedByUserId == CurrentUser.UserId);
+            if (!hasPreviousDocs && _pendingReceiverFiles.Count == 0)
+            {
+                await Toast.ShowWarningAsync(
+                    "يلزم رفع مستند إثبات",
+                    "المرسل يشترط رفع مستند واحد على الأقل قبل تأكيد الاستلام.");
+                return;
+            }
+        }
+
+        _processing = true;
+        try
+        {
+            // 1) رفع المرفقات المختارة (إن وُجدت) قبل تنفيذ الانتقال
+            if (_pendingReceiverFiles.Count > 0)
+            {
+                var uploadResult = await UploadPendingReceiverFilesAsync(_transaction.Id);
+                if (!uploadResult.IsSuccess)
+                {
+                    await Toast.ShowErrorAsync("فشل رفع المرفقات", uploadResult.Error);
+                    return;
+                }
+            }
+
+            // 2) تنفيذ الانتقال
+            var result = await ExecuteConfirmReceiptAsync();
+            if (!result.IsSuccess)
+            {
+                await Toast.ShowErrorAsync("تعذّر الاستلام", result.Error);
+                return;
+            }
+
+            await Toast.ShowSuccessAsync("تم تأكيد استلام البريد بنجاح");
+            await NotifySenderAsync(_transaction.ReferenceNumber, _transaction.Id, _transaction.SenderUserId,
+                $"تم استلام البريد {_transaction.ReferenceNumber}",
+                "أكّد المستلم استلام البريد بنجاح.");
+            await NotifyCcAndManagerAsync("تم الاستلام", $"تم استلام البريد '{_transaction.Subject}'.",
+                NotificationType.MailStatusChanged);
+            _receiverNote = null;
+            _pendingReceiverFiles.Clear();
+            await ReloadTransaction();
+        }
+        catch (Exception ex) { await Toast.ShowErrorAsync("حدث خطأ", ex.Message); }
+        finally { _processing = false; }
+    }
+
+    private async Task<Result> UploadPendingReceiverFilesAsync(Guid MailId)
+    {
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+
+            // Enforce: one receiver-proof document per user per Mail (server-side guard).
+            // Filter by AttachmentType so users involved in multiple workflow stages aren't blocked.
+            var userAlreadyHasDoc = await db.MailAttachments
+                .AnyAsync(d => d.MailId == MailId
+                            && d.UploadedByUserId == CurrentUser.UserId
+                            && d.AttachmentType == AttachmentType.ProofOfReceipt);
+
+            // Idempotent retry: if a doc already exists from a previous failed attempt,
+            // skip the upload step and let the caller proceed with the transition.
+            if (userAlreadyHasDoc)
+            {
+                _pendingReceiverFiles.Clear();
+                return Result.Success();
+            }
+
+            var pf = _pendingReceiverFiles.FirstOrDefault();
+            if (pf is null) return Result.Success();
+
+            using (var validateStream = new MemoryStream(pf.Data))
+            {
+                var validation = FileValidation.Validate(validateStream, pf.Name, pf.ContentType, pf.Size);
+                if (!validation.IsValid)
+                    return Result.Failure($"الملف '{pf.Name}' غير صالح: {validation.ErrorMessage}");
+            }
+
+            // ضغط PDF
+            using var compressInput = new MemoryStream(pf.Data);
+            var compression = await PdfCompression.CompressAsync(compressInput);
+
+            if (compression.CompressedSizeBytes > MaxReceiverCompressedBytes)
+            {
+                compression.OutputStream.Dispose();
+                var sizeMb = compression.CompressedSizeBytes / (1024.0 * 1024.0);
+                return Result.Failure(
+                    $"حجم الملف بعد الضغط ({sizeMb:F2} ميجا) يتجاوز الحد المسموح (5 ميجا).");
+            }
+
+            await using var uploadStream = compression.OutputStream;
+            uploadStream.Position = 0;
+            var uploadResult = await FileStorage.UploadAsync(uploadStream, pf.Name, pf.ContentType);
+
+            db.MailAttachments.Add(new MailAttachment
+            {
+                Id = Guid.NewGuid(),
+                MailId = MailId,
+                OriginalFileName = pf.Name,
+                StoragePath = uploadResult.StoragePath,
+                FileSizeBytes = uploadResult.FileSizeBytes,
+                Checksum = uploadResult.Checksum,
+                ContentType = pf.ContentType,
+                AttachmentType = AttachmentType.ProofOfReceipt,
+                Version = 1,
+                UploadedByUserId = CurrentUser.UserId,
+                UploadedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message);
+        }
+    }
+
+    // ====================== الرفض ======================
+    private void OpenRejectDialog() { _showRejectDialog = true; _rejectionNote = null; }
+    private void CloseRejectDialog() { if (!_processing) { _showRejectDialog = false; _rejectionNote = null; } }
+
+    private async Task ConfirmReject()
+    {
+        if (_transaction is null || string.IsNullOrWhiteSpace(_rejectionNote)) return;
+        _processing = true;
+        try
+        {
+            var result = await ExecuteRejectAsync(_rejectionNote.Trim());
+            if (!result.IsSuccess)
+            {
+                await Toast.ShowErrorAsync("تعذّر الرفض", result.Error);
+                return;
+            }
+
+            await Toast.ShowSuccessAsync("تم رفض البريد وإشعار المرسل");
+            await NotifySenderAsync(_transaction.ReferenceNumber, _transaction.Id, _transaction.SenderUserId,
+                $"رفض البريد {_transaction.ReferenceNumber}",
+                $"تم رفض البريد. السبب: {_rejectionNote!.Trim()}");
+            await NotifyCcAndManagerAsync("تم الرفض", $"تم رفض البريد '{_transaction.Subject}'.",
+                NotificationType.MailStatusChanged);
+            _showRejectDialog = false;
+            _rejectionNote = null;
+            await ReloadTransaction();
+        }
+        catch (Exception ex) { await Toast.ShowErrorAsync("حدث خطأ", ex.Message); }
+        finally { _processing = false; }
+    }
+
+    // ====================== الإلغاء (= حذف نهائي) ======================
+    private void OpenCancelDialog() { _showCancelDialog = true; _cancellationNote = null; }
+    private void CloseCancelDialog() { if (!_processing) { _showCancelDialog = false; _cancellationNote = null; } }
+
+    private async Task ConfirmCancel()
+    {
+        if (_transaction is null || string.IsNullOrWhiteSpace(_cancellationNote)) return;
+        if (!MailStateMachine.CanDelete(_transaction, CurrentUser.UserId))
+        {
+            await Toast.ShowErrorAsync("لا يمكنك إلغاء هذا البريد");
+            return;
+        }
+
+        _processing = true;
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+            var fresh = await db.Mails
+                .Include(t => t.Attachments)
+                .FirstOrDefaultAsync(t => t.Id == _transaction.Id);
+
+            if (fresh is null) { await Toast.ShowErrorAsync("البريد غير موجودة"); return; }
+            if (fresh.Status != MailStatus.Sent)
+            {
+                await Toast.ShowErrorAsync("لا يمكن الإلغاء", "تم استلام البريد أو معالجتها بالفعل.");
+                return;
+            }
+
+            var refNumber = fresh.ReferenceNumber;
+            var receiverUserId = fresh.ReceiverUserId;
+            var reason = _cancellationNote.Trim();
+
+            // 1) سجل تدقيقي قبل الحذف (في AuditLog عبر History — لكنها سُتحذف. نسجل في AuditLog منفصل عبر سجل الحركات الأخير)
+            //    نسجلها بدلاً عن ذلك في تاريخ البريد قبل الحذف ليبقى أثر في إشعار المرسل/المستلم.
+            //    (السجل التدقيقي الرسمي يتم تلقائياً عبر EF interceptor إن وُجد.)
+
+            // 2) حذف الملفات الفعلية من التخزين
+            foreach (var doc in fresh.Attachments.ToList())
+            {
+                try { await FileStorage.DeleteAsync(doc.StoragePath); } catch { /* تجاهل فشل ملف واحد */ }
+            }
+
+            // 3) حذف الإشعارات المرتبطة بهذا البريد
+            var relatedNotifications = await db.Notifications
+                .Where(n => n.MailId == fresh.Id)
+                .ToListAsync();
+            db.Notifications.RemoveRange(relatedNotifications);
+
+            // 4) حذف البريد (Cascade سيحذف Documents/History/Notes)
+            db.Mails.Remove(fresh);
+            await db.SaveChangesAsync();
+
+            // 5) إشعار المستلم بالحذف (إشعار جديد بدون MailId لأن البريد لم تعد موجودة)
+            if (receiverUserId.HasValue && receiverUserId.Value != CurrentUser.UserId)
+            {
+                try
+                {
+                    await NotificationService.NotifyUserAsync(
+                        receiverUserId.Value,
+                        $"إلغاء البريد {refNumber}",
+                        $"ألغى المرسل البريد وحُذفت من النظام. السبب: {reason}",
+                        null,
+                        NotificationType.MailStatusChanged);
+                }
+                catch { }
+            }
+
+            Navigation.NavigateTo($"/Mails?success={Uri.EscapeDataString($"تم إلغاء وحذف البريد {refNumber}")}");
+        }
+        catch (Exception ex) { await Toast.ShowErrorAsync("حدث خطأ", ex.Message); }
+        finally { _processing = false; }
+    }
+
+    // ====================== الأرشفة اليدوية (إداري) ======================
+    private async Task ArchiveTransaction()
+    {
+        if (_transaction is null) return;
+        _processing = true;
+        try
+        {
+            var result = await ExecuteArchiveAsync();
+            if (!result.IsSuccess) { await Toast.ShowErrorAsync("تعذّرت الأرشفة", result.Error); return; }
+            await Toast.ShowSuccessAsync("تمت أرشفة البريد");
+            await ReloadTransaction();
+        }
+        catch (Exception ex) { await Toast.ShowErrorAsync("حدث خطأ", ex.Message); }
+        finally { _processing = false; }
+    }
+
+    private void PreviewDocument(Guid docId)
+    {
+        _previewDocId = docId;
+        _pdfFullscreen = false;
+    }
+    private void ClosePreview() { _previewDocId = null; _pdfFullscreen = false; }
+    private void TogglePdfFullscreen() => _pdfFullscreen = !_pdfFullscreen;
+    private void HandlePreviewKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") ClosePreview();
+        if (e.Key is "f" or "F") TogglePdfFullscreen();
+    }
+
+    private static string GetActionLabel(MailStatus to) => to switch
+    {
+        MailStatus.AssignedToStaff => "استلام وبدء التوصيل",
+        MailStatus.Received  => "تأكيد الاستلام",
+        MailStatus.Rejected  => "رفض",
+        MailStatus.Archived  => "أرشفة",
+        _ => to.ToString()
+    };
+
+    private static string GetActionBtnClass(MailStatus to) => to switch
+    {
+        MailStatus.AssignedToStaff => "workflow-btn-primary",
+        MailStatus.Received  => "workflow-btn-success",
+        MailStatus.Rejected  => "workflow-btn-warning",
+        MailStatus.Archived  => "workflow-btn-secondary",
+        _ => ""
+    };
+
+    private static string GetStatusLabel(MailStatus s) => s switch
+    {
+        MailStatus.Sent      => "بانتظار الشؤون الإدارية",
+        MailStatus.AssignedToStaff => "موجه لموظف",
+        MailStatus.Received  => "تم الاستلام",
+        MailStatus.Rejected  => "مرفوضة",
+        MailStatus.Archived  => "مؤرشفة",
+        _ => s.ToString()
+    };
+
+    private static string GetStatusCssClass(MailStatus s) => s switch
+    {
+        MailStatus.Sent      => "status-pending",
+        MailStatus.AssignedToStaff => "status-in-transit",
+        MailStatus.Received  => "status-confirmed",
+        MailStatus.Rejected  => "status-returned",
+        MailStatus.Archived  => "status-archived",
+        _ => ""
+    };
+
+    private static string GetStatusIcon(MailStatus s) => s switch
+    {
+        MailStatus.Sent      => "bi-send-fill",
+        MailStatus.AssignedToStaff => "bi-truck",
+        MailStatus.Received  => "bi-check2-all",
+        MailStatus.Rejected  => "bi-x-octagon",
+        MailStatus.Archived  => "bi-archive",
+        _ => "bi-question-circle"
+    };
+
+    private static string GetTypeLabel(MailType t) => t switch
+    {
+        MailType.DocumentDelivery => "تسليم مرفقات",
+        MailType.CashTransfer => "تحويل نقدي",
+        MailType.InternalDepartment => "داخلي بين الإدارات",
+        MailType.BranchToBranch => "بين الفروع",
+        MailType.Other => "أخرى",
+        _ => t.ToString()
+    };
+
+    private static string GetPriorityLabel(MailPriority p) => p switch
+    {
+        MailPriority.Normal => "عادية",
+        MailPriority.Important => "مهمة",
+        MailPriority.Urgent => "عاجلة",
+        _ => p.ToString()
+    };
+
+    private static string GetPriorityClass(MailPriority p) => p switch
+    {
+        MailPriority.Normal => "priority-normal",
+        MailPriority.Important => "priority-important",
+        MailPriority.Urgent => "priority-urgent",
+        _ => ""
+    };
+
+    private static string GetDocTypeName(AttachmentType d) => d switch
+    {
+        AttachmentType.Attachment => "مرفق عام",
+        AttachmentType.ProofOfReceipt => "إثبات استلام",
+        _ => d.ToString()
+    };
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024):F1} MB";
+    }
+
+    private static string FormatDelay(double minutes)
+    {
+        if (minutes < 60) return $"{(int)Math.Round(minutes)} دقيقة";
+        var hours = minutes / 60.0;
+        if (hours < 24) return $"{(int)Math.Round(hours)} ساعة";
+        var days = hours / 24.0;
+        return $"{(int)Math.Round(days)} يوم";
+    }
+}

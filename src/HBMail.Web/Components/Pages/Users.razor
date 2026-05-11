@@ -1,0 +1,678 @@
+﻿@page "/users"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "SuperAdmin,ITAdmin")]
+@using HBMail.Application.Common.Interfaces
+@using HBMail.Infrastructure.Identity
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject UserManager<ApplicationUser> UserManager
+@inject RoleManager<ApplicationRole> RoleManager
+@inject IAppDbContext DbContext
+
+<PageTitle>المستخدمين - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="page-title-section">
+        <div class="title-with-action">
+            <div>
+                <h1 class="section-title"><i class="bi bi-people"></i> إدارة المستخدمين</h1>
+                <p class="section-subtitle">إدارة حسابات المستخدمين والصلاحيات</p>
+            </div>
+            <button class="btn-hb-primary" @onclick="OpenAddModal">
+                <i class="bi bi-person-plus"></i> إضافة مستخدم
+            </button>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="hb-card filter-card">
+        <div class="search-row">
+            <div class="filter-group">
+                <label class="hb-form-label">بحث</label>
+                <input type="text" class="hb-form-control" placeholder="الاسم أو اسم المستخدم..."
+                       @bind="_searchTerm" @bind:event="oninput" />
+            </div>
+            <div class="filter-group">
+                <label class="hb-form-label">الحالة</label>
+                <select class="hb-form-control" @bind="_activeFilter">
+                    <option value="">الكل</option>
+                    <option value="true">نشط</option>
+                    <option value="false">معطل</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="hb-alert hb-alert-success">
+            <i class="bi bi-check-circle-fill"></i> @_successMessage
+        </div>
+    }
+
+    <!-- Stats -->
+    <div class="user-stats">
+        <div class="stat-item">
+            <i class="bi bi-people-fill"></i>
+            <span class="stat-number">@_users.Count</span>
+            <span class="stat-label">إجمالي المستخدمين</span>
+        </div>
+        <div class="stat-item stat-active">
+            <i class="bi bi-person-check-fill"></i>
+            <span class="stat-number">@_users.Count(u => u.IsActive)</span>
+            <span class="stat-label">نشط</span>
+        </div>
+        <div class="stat-item stat-inactive">
+            <i class="bi bi-person-x-fill"></i>
+            <span class="stat-number">@_users.Count(u => !u.IsActive)</span>
+            <span class="stat-label">معطل</span>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="hb-loading">
+            <div class="hb-spinner"></div>
+            <span>جاري تحميل المستخدمين...</span>
+        </div>
+    }
+    else
+    {
+        <div class="table-container">
+            <table class="hb-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>الاسم</th>
+                        <th>اسم المستخدم</th>
+                        <th>الفرع</th>
+                        <th>الإدارة</th>
+                        <th>الدور</th>
+                        <th>الحالة</th>
+                        <th>آخر دخول</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var index = 0; }
+                    @foreach (var user in GetFilteredUsers())
+                    {
+                        index++;
+                        <tr class="@(user.IsActive ? "" : "row-inactive")">
+                            <td>@index</td>
+                            <td class="user-name-cell">
+                                <div class="user-avatar">@GetInitials(user.FullNameAr)</div>
+                                <div>
+                                    <span>@user.FullNameAr</span>
+                                    @if (!string.IsNullOrEmpty(user.JobTitle))
+                                    {
+                                        <small class="user-job-title">@user.JobTitle</small>
+                                    }
+                                </div>
+                            </td>
+                            <td dir="ltr" style="text-align:center;"><code>@user.UserName</code></td>
+                            <td>@(_branchNames.GetValueOrDefault(user.BranchId ?? Guid.Empty, "—"))</td>
+                            <td>@(_deptNames.GetValueOrDefault(user.DepartmentId ?? Guid.Empty, "—"))</td>
+                            <td>
+                                @{
+                                    var role = _userRoles.GetValueOrDefault(user.Id, "—");
+                                }
+                                <span class="hb-badge hb-badge-primary">@role</span>
+                            </td>
+                            <td>
+                                @if (user.IsActive)
+                                {
+                                    <span class="hb-badge hb-badge-success">نشط</span>
+                                }
+                                else
+                                {
+                                    <span class="hb-badge hb-badge-danger">معطل</span>
+                                }
+                            </td>
+                            <td class="date-cell">
+                                @(user.LastLoginAt.HasValue ? AppTime.FormatYemen(user.LastLoginAt.Value) : "لم يسجل دخول")
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="action-btn edit" title="تعديل" @onclick="() => OpenEditModal(user)">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    @if (user.IsActive)
+                                    {
+                                        <button class="action-btn reject" title="تعطيل" @onclick="() => ToggleActive(user)">
+                                            <i class="bi bi-person-x"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button class="action-btn view" title="تفعيل" @onclick="() => ToggleActive(user)">
+                                            <i class="bi bi-person-check"></i>
+                                        </button>
+                                    }
+                                    <button class="action-btn delete" title="حذف نهائي" @onclick="() => OpenDeleteModal(user)">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@* ===== Add/Edit Modal ===== *@
+@if (_showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3><i class="bi bi-@(_editingUser != null ? "pencil-square" : "person-plus")"></i> @(_editingUser != null ? "تعديل المستخدم" : "إضافة مستخدم جديد")</h3>
+                <button class="modal-close" @onclick="CloseModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <EditForm Model="_model" OnValidSubmit="HandleSave" FormName="UserForm">
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="hb-alert hb-alert-danger" style="margin-bottom:1rem;">
+                            <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+                        </div>
+                    }
+                    <div class="form-grid">
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الاسم الكامل <span class="required-star">*</span></label>
+                            <InputText @bind-Value="_model.FullNameAr" class="hb-form-control" placeholder="الاسم بالعربي" />
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">اسم المستخدم <span class="required-star">*</span></label>
+                            <InputText @bind-Value="_model.Username" class="hb-form-control" placeholder="مثال: awadmqram" dir="ltr" />
+                            <small class="hb-form-help">يُستخدم لتسجيل الدخول — بدون مسافات</small>
+                        </div>
+                        @if (_editingUser == null)
+                        {
+                            <div class="hb-form-group">
+                                <label class="hb-form-label">كلمة المرور <span class="required-star">*</span></label>
+                                <div class="password-field">
+                                    <InputText @bind-Value="_model.Password" type="@(_showPassword ? "text" : "password")" class="hb-form-control" placeholder="8 إلى 12 حرف" maxlength="12" />
+                                    <button type="button" class="toggle-pw-btn" @onclick="() => _showPassword = !_showPassword" tabindex="-1">
+                                        <i class="bi @(_showPassword ? "bi-eye-slash" : "bi-eye")"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="hb-form-group">
+                                <label class="hb-form-label">إعادة تعيين كلمة المرور</label>
+                                <div class="password-field">
+                                    <InputText @bind-Value="_model.Password" type="@(_showPassword ? "text" : "password")" class="hb-form-control" placeholder="اتركه فارغاً إذا لا تريد التغيير" maxlength="12" />
+                                    <button type="button" class="toggle-pw-btn" @onclick="() => _showPassword = !_showPassword" tabindex="-1">
+                                        <i class="bi @(_showPassword ? "bi-eye-slash" : "bi-eye")"></i>
+                                    </button>
+                                </div>
+                                <small class="hb-form-help">عند التغيير سيُطلب من المستخدم تعيين كلمة مرور جديدة عند أول دخول</small>
+                            </div>
+                        }
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الرقم الوظيفي</label>
+                            <InputText @bind-Value="_model.EmployeeNumber" class="hb-form-control" placeholder="مثال: EMP-001" />
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">المسمى الوظيفي</label>
+                            <InputText @bind-Value="_model.JobTitle" class="hb-form-control" placeholder="المسمى الوظيفي" />
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الفرع</label>
+                            <InputSelect @bind-Value="_model.BranchId" @bind-Value:after="OnBranchChanged" class="hb-form-control">
+                                <option value="">-- بدون --</option>
+                                @foreach (var b in _allBranches)
+                                {
+                                    <option value="@b.Id">@b.NameAr</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الإدارة</label>
+                            <InputSelect @bind-Value="_model.DepartmentId" class="hb-form-control" disabled="@(!IsHqSelected)">
+                                <option value="">-- بدون --</option>
+                                @foreach (var d in _allDepartments)
+                                {
+                                    <option value="@d.Id">@d.NameAr</option>
+                                }
+                            </InputSelect>
+                            @if (!IsHqSelected && !string.IsNullOrEmpty(_model.BranchId))
+                            {
+                                <small class="hb-form-help">الإدارة متاحة فقط للإدارة العامة</small>
+                            }
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الدور</label>
+                            <InputSelect @bind-Value="_model.Role" class="hb-form-control">
+                                <option value="">-- بدون --</option>
+                                @foreach (var role in _allRoles)
+                                {
+                                    <option value="@role">@role</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الحالة</label>
+                            <InputSelect @bind-Value="_model.IsActive" class="hb-form-control">
+                                <option value="true">نشط</option>
+                                <option value="false">معطل</option>
+                            </InputSelect>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-hb-primary" disabled="@_saving">
+                        @if (_saving)
+                        {
+                            <span class="hb-spinner" style="width:18px;height:18px;border-width:2px;"></span>
+                            <span>جاري الحفظ...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-lg"></i>
+                            <span>@(_editingUser != null ? "تحديث" : "حفظ")</span>
+                        }
+                    </button>
+                    <button type="button" class="btn-hb-outline" @onclick="CloseModal">إلغاء</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@* ===== Delete Confirmation Modal ===== *@
+@if (_showDeleteModal)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-content modal-sm" @onclick:stopPropagation="true">
+            <div class="modal-header modal-header-danger">
+                <h3><i class="bi bi-exclamation-triangle"></i> حذف المستخدم</h3>
+                <button class="modal-close" @onclick="CloseDeleteModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="hb-alert hb-alert-danger" style="margin-bottom:1rem;">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+                    </div>
+                }
+                @if (_canHardDelete)
+                {
+                    <p class="delete-message">هل أنت متأكد من <strong>الحذف النهائي</strong> للمستخدم <strong>@_deletingUser?.FullNameAr</strong>؟</p>
+                    <p class="delete-warning"><i class="bi bi-info-circle"></i> هذا المستخدم غير مرتبط بأي بريد — سيتم حذفه نهائياً.</p>
+                }
+                else
+                {
+                    <p class="delete-message">المستخدم <strong>@_deletingUser?.FullNameAr</strong> مرتبط ببريد في النظام.</p>
+                    <p class="delete-warning"><i class="bi bi-info-circle"></i> لا يمكن حذفه نهائياً. يمكنك <strong>تعطيله</strong> بدلاً من ذلك.</p>
+                }
+            </div>
+            <div class="modal-footer">
+                @if (_canHardDelete)
+                {
+                    <button class="btn-hb-danger" @onclick="HandleHardDelete" disabled="@_saving">
+                        @if (_saving) { <span class="hb-spinner" style="width:18px;height:18px;border-width:2px;"></span> }
+                        <i class="bi bi-trash3"></i> حذف نهائي
+                    </button>
+                }
+                else
+                {
+                    <button class="btn-hb-warning" @onclick="HandleSoftDelete" disabled="@_saving">
+                        @if (_saving) { <span class="hb-spinner" style="width:18px;height:18px;border-width:2px;"></span> }
+                        <i class="bi bi-person-x"></i> تعطيل الحساب
+                    </button>
+                }
+                <button class="btn-hb-outline" @onclick="CloseDeleteModal">إلغاء</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ApplicationUser> _users = [];
+    private Dictionary<Guid, string> _branchNames = [];
+    private Dictionary<Guid, string> _deptNames = [];
+    private Dictionary<Guid, string> _userRoles = [];
+    private List<HBMail.Domain.Entities.Branch> _allBranches = [];
+    private List<HBMail.Domain.Entities.Department> _allDepartments = [];
+    private List<string> _allRoles = [];
+    private bool _loading = true;
+    private string _searchTerm = "";
+    private string _activeFilter = "";
+
+    // Modal state
+    private bool _showModal, _showDeleteModal, _saving;
+    private bool _showPassword;
+    private bool _canHardDelete;
+    private string? _successMessage, _errorMessage;
+    private ApplicationUser? _editingUser;
+    private ApplicationUser? _deletingUser;
+    private UserFormModel _model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _users = await UserManager.Users
+            .OrderBy(u => u.FullNameAr)
+            .ToListAsync();
+
+        _branchNames = await DbContext.Branches
+            .ToDictionaryAsync(b => b.Id, b => b.NameAr);
+
+        _deptNames = await DbContext.Departments
+            .ToDictionaryAsync(d => d.Id, d => d.NameAr);
+
+        _allBranches = await DbContext.Branches
+            .Where(b => b.IsActive)
+            .OrderBy(b => b.NameAr)
+            .ToListAsync();
+
+        _allDepartments = await DbContext.Departments
+            .Where(d => d.IsActive)
+            .OrderBy(d => d.NameAr)
+            .ToListAsync();
+
+        _allRoles = await RoleManager.Roles
+            .OrderBy(r => r.Name)
+            .Select(r => r.Name!)
+            .ToListAsync();
+
+        // Load roles for each user
+        _userRoles.Clear();
+        foreach (var user in _users)
+        {
+            var roles = await UserManager.GetRolesAsync(user);
+            _userRoles[user.Id] = roles.FirstOrDefault() ?? "—";
+        }
+
+        _loading = false;
+    }
+
+    private bool IsHqSelected =>
+        !string.IsNullOrEmpty(_model.BranchId) &&
+        _allBranches.Any(b => b.Id.ToString() == _model.BranchId && b.Code == "HQ");
+
+    private void OnBranchChanged()
+    {
+        if (!IsHqSelected)
+            _model.DepartmentId = null;
+    }
+
+    private IEnumerable<ApplicationUser> GetFilteredUsers()
+    {
+        var query = _users.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+            query = query.Where(u =>
+                (u.FullNameAr?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (u.UserName?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false));
+
+        if (bool.TryParse(_activeFilter, out var isActive))
+            query = query.Where(u => u.IsActive == isActive);
+
+        return query;
+    }
+
+    // ===== Add =====
+    private void OpenAddModal()
+    {
+        _editingUser = null;
+        _model = new();
+        _errorMessage = null;
+        _showModal = true;
+    }
+
+    // ===== Edit =====
+    private async void OpenEditModal(ApplicationUser user)
+    {
+        _editingUser = user;
+        var roles = await UserManager.GetRolesAsync(user);
+        _model = new UserFormModel
+        {
+            FullNameAr = user.FullNameAr,
+            Username = user.UserName ?? "",
+            EmployeeNumber = user.EmployeeNumber,
+            JobTitle = user.JobTitle,
+            BranchId = user.BranchId?.ToString(),
+            DepartmentId = user.DepartmentId?.ToString(),
+            Role = roles.FirstOrDefault() ?? "",
+            IsActive = user.IsActive
+        };
+        _errorMessage = null;
+        _showModal = true;
+        StateHasChanged();
+    }
+
+    private async Task HandleSave()
+    {
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_model.FullNameAr) || string.IsNullOrWhiteSpace(_model.Username))
+            {
+                _errorMessage = "يرجى إدخال الاسم واسم المستخدم";
+                return;
+            }
+
+            // Validate username: no spaces
+            if (_model.Username.Contains(' '))
+            {
+                _errorMessage = "اسم المستخدم لا يمكن أن يحتوي على مسافات";
+                return;
+            }
+
+            if (_editingUser != null)
+            {
+                // Check username uniqueness (excluding current user)
+                var existingByName = await UserManager.FindByNameAsync(_model.Username);
+                if (existingByName != null && existingByName.Id != _editingUser.Id)
+                {
+                    _errorMessage = "اسم المستخدم مستخدم بالفعل";
+                    return;
+                }
+
+                _editingUser.FullNameAr = _model.FullNameAr;
+                _editingUser.UserName = _model.Username;
+                _editingUser.NormalizedUserName = _model.Username.ToUpperInvariant();
+                _editingUser.EmployeeNumber = _model.EmployeeNumber;
+                _editingUser.JobTitle = _model.JobTitle;
+                _editingUser.BranchId = string.IsNullOrEmpty(_model.BranchId) ? null : Guid.Parse(_model.BranchId);
+                _editingUser.DepartmentId = string.IsNullOrEmpty(_model.DepartmentId) ? null : Guid.Parse(_model.DepartmentId);
+                _editingUser.IsActive = _model.IsActive;
+
+                var result = await UserManager.UpdateAsync(_editingUser);
+                if (!result.Succeeded)
+                {
+                    _errorMessage = string.Join("، ", result.Errors.Select(e => e.Description));
+                    return;
+                }
+
+                // Update role
+                var currentRoles = await UserManager.GetRolesAsync(_editingUser);
+                if (currentRoles.Any())
+                    await UserManager.RemoveFromRolesAsync(_editingUser, currentRoles);
+                if (!string.IsNullOrEmpty(_model.Role))
+                    await UserManager.AddToRoleAsync(_editingUser, _model.Role);
+
+                // Reset password if provided
+                if (!string.IsNullOrWhiteSpace(_model.Password))
+                {
+                    // Re-fetch user to get latest ConcurrencyStamp after UpdateAsync + role changes
+                    _editingUser = (await UserManager.FindByIdAsync(_editingUser.Id.ToString()))!;
+                    var token = await UserManager.GeneratePasswordResetTokenAsync(_editingUser);
+                    var resetResult = await UserManager.ResetPasswordAsync(_editingUser, token, _model.Password);
+                    if (!resetResult.Succeeded)
+                    {
+                        _errorMessage = string.Join("، ", resetResult.Errors.Select(e => e.Description));
+                        return;
+                    }
+                    _editingUser = (await UserManager.FindByIdAsync(_editingUser.Id.ToString()))!;
+                    _editingUser.ForcePasswordChange = true;
+                    _editingUser.PasswordChangedAt = DateTime.UtcNow;
+                    await UserManager.UpdateAsync(_editingUser);
+                }
+
+                _successMessage = $"تم تحديث المستخدم «{_model.FullNameAr}» بنجاح";
+            }
+            else
+            {
+                // Add
+                if (string.IsNullOrWhiteSpace(_model.Password))
+                {
+                    _errorMessage = "يرجى إدخال كلمة المرور";
+                    return;
+                }
+
+                var existingByName = await UserManager.FindByNameAsync(_model.Username);
+                if (existingByName != null)
+                {
+                    _errorMessage = "اسم المستخدم مستخدم بالفعل";
+                    return;
+                }
+
+                var user = new ApplicationUser
+                {
+                    Id = Guid.NewGuid(),
+                    FullNameAr = _model.FullNameAr,
+                    UserName = _model.Username,
+                    EmployeeNumber = _model.EmployeeNumber,
+                    JobTitle = _model.JobTitle,
+                    BranchId = string.IsNullOrEmpty(_model.BranchId) ? null : Guid.Parse(_model.BranchId),
+                    DepartmentId = string.IsNullOrEmpty(_model.DepartmentId) ? null : Guid.Parse(_model.DepartmentId),
+                    IsActive = _model.IsActive,
+                    CreatedAt = DateTime.UtcNow,
+                    EmailConfirmed = true
+                };
+
+                var result = await UserManager.CreateAsync(user, _model.Password);
+                if (!result.Succeeded)
+                {
+                    _errorMessage = string.Join("، ", result.Errors.Select(e => e.Description));
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(_model.Role))
+                    await UserManager.AddToRoleAsync(user, _model.Role);
+
+                _successMessage = $"تم إضافة المستخدم «{_model.FullNameAr}» بنجاح";
+            }
+
+            _showModal = false;
+            _loading = true;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"حدث خطأ: {ex.Message}";
+        }
+        finally { _saving = false; }
+    }
+
+    private void CloseModal() { _showModal = false; _errorMessage = null; }
+
+    // ===== Toggle Active (Soft Delete / Restore) =====
+    private async Task ToggleActive(ApplicationUser user)
+    {
+        user.IsActive = !user.IsActive;
+        await UserManager.UpdateAsync(user);
+        _successMessage = user.IsActive
+            ? $"تم تفعيل حساب «{user.FullNameAr}»"
+            : $"تم تعطيل حساب «{user.FullNameAr}»";
+        StateHasChanged();
+    }
+
+    // ===== Delete =====
+    private async void OpenDeleteModal(ApplicationUser user)
+    {
+        _deletingUser = user;
+        _errorMessage = null;
+
+        // Check if user has any related data
+        var userId = user.Id;
+        var hasRelations =
+            await DbContext.Mails.AnyAsync(m =>
+                m.SenderUserId == userId ||
+                m.ReceiverUserId == userId ||
+                m.CreatedByUserId == userId ||
+                m.AssignedByUserId == userId ||
+                m.ManagerNotifiedUserId == userId ||
+                m.OriginalReceiverUserId == userId) ||
+            await DbContext.MailCCs.AnyAsync(cc => cc.UserId == userId);
+
+        _canHardDelete = !hasRelations;
+        _showDeleteModal = true;
+        StateHasChanged();
+    }
+
+    private async Task HandleHardDelete()
+    {
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            var result = await UserManager.DeleteAsync(_deletingUser!);
+            if (!result.Succeeded)
+            {
+                _errorMessage = string.Join("، ", result.Errors.Select(e => e.Description));
+                return;
+            }
+            _successMessage = $"تم حذف المستخدم «{_deletingUser!.FullNameAr}» نهائياً";
+            _showDeleteModal = false;
+            _loading = true;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.InnerException?.Message?.Contains("REFERENCE") == true
+                ? "لا يمكن حذف هذا المستخدم لأنه مرتبط ببيانات في النظام. قم بتعطيله بدلاً من ذلك."
+                : $"حدث خطأ: {ex.Message}";
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task HandleSoftDelete()
+    {
+        _saving = true;
+        try
+        {
+            _deletingUser!.IsActive = false;
+            await UserManager.UpdateAsync(_deletingUser);
+            _successMessage = $"تم تعطيل حساب «{_deletingUser.FullNameAr}» بنجاح";
+            _showDeleteModal = false;
+            StateHasChanged();
+        }
+        finally { _saving = false; }
+    }
+
+    private void CloseDeleteModal() { _showDeleteModal = false; _errorMessage = null; }
+
+    private static string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "؟";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 ? $"{parts[0][0]}{parts[1][0]}" : $"{parts[0][0]}";
+    }
+
+    private class UserFormModel
+    {
+        public string FullNameAr { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string? Password { get; set; }
+        public string? EmployeeNumber { get; set; }
+        public string? JobTitle { get; set; }
+        public string? BranchId { get; set; }
+        public string? DepartmentId { get; set; }
+        public string? Role { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

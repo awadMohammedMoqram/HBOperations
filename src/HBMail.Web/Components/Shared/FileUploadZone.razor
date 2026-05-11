@@ -1,0 +1,152 @@
+@using Microsoft.AspNetCore.Components.Forms
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
+
+<div class="upload-zone @(_isDragging ? "dragging" : "")"
+     @ondragenter="HandleDragEnter"
+     @ondragenter:preventDefault
+     @ondragleave="HandleDragLeave"
+     @ondragleave:preventDefault
+     @ondragover:preventDefault
+     @ondrop="HandleDrop"
+     @ondrop:preventDefault>
+    
+    <InputFile OnChange="HandleFileSelection" accept=".pdf" multiple
+               class="file-input-hidden" id="@_inputId" />
+    
+    @if (_uploading)
+    {
+        <div class="upload-progress-area">
+            <div class="upload-spinner"></div>
+            <p class="upload-status">جاري رفع الملفات... (@_uploadedCount / @_totalFiles)</p>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill" style="width: @(_totalFiles > 0 ? (_uploadedCount * 100 / _totalFiles) : 0)%"></div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <label for="@_inputId" class="upload-label">
+            <i class="bi bi-cloud-arrow-up"></i>
+            <span class="upload-text">اسحب ملفات PDF هنا أو <strong>اضغط للاختيار</strong></span>
+            <span class="upload-hint">PDF فقط — حتى 5 ملفات، بإجمالي 20 ميجابايت</span>
+        </label>
+    }
+</div>
+
+@if (_errors.Count > 0)
+{
+    <div class="upload-errors">
+        @foreach (var error in _errors)
+        {
+            <div class="upload-error-item">
+                <i class="bi bi-exclamation-triangle"></i> @error
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid MailId { get; set; }
+    [Parameter] public EventCallback OnUploadCompleted { get; set; }
+    [Parameter] public HBMail.Domain.Enums.AttachmentType AttachmentType { get; set; } = HBMail.Domain.Enums.AttachmentType.Attachment;
+
+    private readonly string _inputId = $"file-upload-{Guid.NewGuid():N}";
+    private bool _isDragging;
+    private bool _uploading;
+    private int _uploadedCount;
+    private int _totalFiles;
+    private readonly List<string> _errors = [];
+
+    private const long MaxFileSize = 20L * 1024 * 1024; // 20MB total cap
+    private const int MaxFiles = 5;
+    private const long MaxTotalBytes = 20L * 1024 * 1024; // 20MB total
+
+    private void HandleDragEnter() => _isDragging = true;
+    private void HandleDragLeave() => _isDragging = false;
+    private void HandleDrop() => _isDragging = false;
+
+    private async Task HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        _errors.Clear();
+        var files = e.GetMultipleFiles(MaxFiles);
+        _totalFiles = files.Count;
+        _uploadedCount = 0;
+        _uploading = true;
+        long uploadedBytes = 0;
+        StateHasChanged();
+
+        foreach (var file in files)
+        {
+            try
+            {
+                if (uploadedBytes + file.Size > MaxTotalBytes)
+                {
+                    _errors.Add($"{file.Name}: تجاوز الحد الأقصى للحجم الإجمالي (20 ميجا)");
+                    _uploadedCount++;
+                    StateHasChanged();
+                    continue;
+                }
+
+                if (file.Size > MaxFileSize)
+                {
+                    _errors.Add($"{file.Name}: حجم الملف يتجاوز 20 ميجابايت");
+                    _uploadedCount++;
+                    StateHasChanged();
+                    continue;
+                }
+
+                if (file.ContentType != "application/pdf")
+                {
+                    _errors.Add($"{file.Name}: نوع الملف غير مسموح (PDF فقط)");
+                    _uploadedCount++;
+                    StateHasChanged();
+                    continue;
+                }
+
+                using var content = new MultipartFormDataContent();
+                using var stream = file.OpenReadStream(MaxFileSize);
+                using var streamContent = new StreamContent(stream);
+                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+                content.Add(streamContent, "file", file.Name);
+
+                var baseUri = Navigation.BaseUri.TrimEnd('/');
+                var handler = new HttpClientHandler { UseCookies = true };
+                using var httpClient = new HttpClient(handler);
+                // Forward authentication cookies from the current request
+                var httpContext = HttpContextAccessor.HttpContext;
+                if (httpContext?.Request.Headers.ContainsKey("Cookie") == true)
+                {
+                    httpClient.DefaultRequestHeaders.Add("Cookie", httpContext.Request.Headers["Cookie"].ToString());
+                }
+                var response = await httpClient.PostAsync(
+                    $"{baseUri}/api/documents/upload/{MailId}?docType={(int)AttachmentType}", content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorText = await response.Content.ReadAsStringAsync();
+                    _errors.Add($"{file.Name}: {errorText}");
+                }
+                else
+                {
+                    uploadedBytes += file.Size;
+                }
+            }
+            catch (Exception ex)
+            {
+                _errors.Add($"{file.Name}: خطأ في الرفع - {ex.Message}");
+            }
+
+            _uploadedCount++;
+            StateHasChanged();
+        }
+
+        _uploading = false;
+        StateHasChanged();
+
+        if (_errors.Count < _totalFiles)
+        {
+            await OnUploadCompleted.InvokeAsync();
+        }
+    }
+}

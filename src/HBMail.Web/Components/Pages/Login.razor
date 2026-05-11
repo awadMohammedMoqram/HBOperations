@@ -1,0 +1,135 @@
+@page "/login"
+@layout EmptyLayout
+@using Microsoft.AspNetCore.Identity
+@using HBMail.Infrastructure.Identity
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager Navigation
+
+<PageTitle>تسجيل دخول الإدارة - بنك حضرموت</PageTitle>
+
+<div class="admin-login-page" dir="rtl">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo">
+                    <img src="Images/aboutLogo-fDwVp-So.svg" alt="بنك حضرموت" />
+                </div>
+                <h1 class="login-title">نظام البريد الداخلي</h1>
+                <p class="login-subtitle">الرجاء إدخال بيانات الدخول للمتابعة</p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    @_errorMessage
+                </div>
+            }
+
+            <EditForm Model="_model" OnValidSubmit="HandleLogin" FormName="login" class="login-form">
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="bi bi-person-fill"></i>
+                        اسم المستخدم
+                    </label>
+                    <InputText @bind-Value="_model.Username" class="form-control" placeholder="أدخل اسم المستخدم" autocomplete="username" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="bi bi-lock-fill"></i>
+                        كلمة المرور
+                    </label>
+                    <InputText @bind-Value="_model.Password" type="password" class="form-control" placeholder="••••••••" autocomplete="current-password" />
+                </div>
+
+                <div class="form-group remember-group">
+                    <label class="remember-label">
+                        <input type="checkbox" @bind="_model.RememberMe" style="width:14px;height:14px;accent-color:#003d7a;cursor:pointer;margin:0;transform:scale(0.85);" />
+                        <span>تذكرني</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn-login" disabled="@_isLoading">
+                    @if (_isLoading)
+                    {
+                        <span>جاري تسجيل الدخول...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        <span>تسجيل الدخول</span>
+                    }
+                </button>
+            </EditForm>
+
+            <div class="login-footer">
+                <p class="footer-text">
+                    <i class="bi bi-shield-check"></i>
+                    جميع البيانات محمية ومشفرة
+                </p>
+                <p class="footer-copyright">© @DateTime.Now.Year بنك حضرموت - جميع الحقوق محفوظة</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private LoginModel _model { get; set; } = new();
+
+    private string? _errorMessage;
+    private bool _isLoading;
+
+    private async Task HandleLogin()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        var result = await SignInManager.PasswordSignInAsync(
+            _model.Username, _model.Password, _model.RememberMe, lockoutOnFailure: true);
+
+        if (result.Succeeded)
+        {
+            // Check password expiry (90 days) and force-change flag
+            var user = await SignInManager.UserManager.FindByNameAsync(_model.Username);
+            if (user is not null)
+            {
+                user.LastLoginAt = DateTime.UtcNow;
+                await SignInManager.UserManager.UpdateAsync(user);
+
+                if (user.ForcePasswordChange ||
+                    (user.PasswordChangedAt.HasValue && user.PasswordChangedAt.Value.AddDays(90) < DateTime.UtcNow))
+                {
+                    Navigation.NavigateTo($"/change-password?expired=true", forceLoad: true);
+                    return;
+                }
+            }
+            Navigation.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        if (result.IsLockedOut)
+        {
+            _errorMessage = "تم قفل الحساب مؤقتاً بسبب محاولات تسجيل دخول متعددة. حاول مرة أخرى بعد 15 دقيقة.";
+        }
+        else if (result.RequiresTwoFactor)
+        {
+            Navigation.NavigateTo($"/login-2fa?rememberMe={_model.RememberMe}", forceLoad: true);
+            return;
+        }
+        else
+        {
+            _errorMessage = "اسم المستخدم أو كلمة المرور غير صحيحة.";
+        }
+
+        _isLoading = false;
+    }
+
+    private sealed class LoginModel
+    {
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+        public bool RememberMe { get; set; }
+    }
+}

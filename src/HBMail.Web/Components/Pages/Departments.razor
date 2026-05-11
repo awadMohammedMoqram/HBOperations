@@ -1,0 +1,345 @@
+﻿@page "/departments"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "SuperAdmin,ITAdmin")]
+@using HBMail.Application.Common.Interfaces
+@using HBMail.Domain.Entities
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+
+<PageTitle>الأقسام - بنك حضرموت</PageTitle>
+
+<div class="page-container hb-fade-in">
+    <div class="page-title-section">
+        <div class="title-with-action">
+            <div>
+                <h1 class="section-title"><i class="bi bi-diagram-3-fill"></i> إدارة الأقسام</h1>
+                <p class="section-subtitle">عرض وإدارة الأقسام والإدارات في البنك</p>
+            </div>
+            <button class="btn-hb-primary" @onclick="OpenAddModal">
+                <i class="bi bi-plus-circle"></i> إضافة قسم
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="dept-stats">
+        <div class="stat-item">
+            <i class="bi bi-diagram-3-fill"></i>
+            <span class="stat-number">@_departments.Count</span>
+            <span class="stat-label">إجمالي الأقسام</span>
+        </div>
+        <div class="stat-item stat-active">
+            <i class="bi bi-check-circle-fill"></i>
+            <span class="stat-number">@_departments.Count(d => d.IsActive)</span>
+            <span class="stat-label">نشط</span>
+        </div>
+        <div class="stat-item stat-inactive">
+            <i class="bi bi-pause-circle-fill"></i>
+            <span class="stat-number">@_departments.Count(d => !d.IsActive)</span>
+            <span class="stat-label">غير نشط</span>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="hb-alert hb-alert-success">
+            <i class="bi bi-check-circle-fill"></i> @_successMessage
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="hb-loading"><div class="hb-spinner"></div><span>جاري تحميل الأقسام...</span></div>
+    }
+    else
+    {
+        <div class="table-container">
+            <table class="hb-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>اسم القسم</th>
+                        <th>الرمز</th>
+                        <th>القسم الرئيسي</th>
+                        <th>الأقسام الفرعية</th>
+                        <th>الحالة</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var index = 0; }
+                    @foreach (var dept in _departments)
+                    {
+                        index++;
+                        <tr>
+                            <td>@index</td>
+                            <td>
+                                <div class="dept-name">
+                                    <i class="bi bi-diagram-3"></i>
+                                    @dept.NameAr
+                                </div>
+                            </td>
+                            <td><span class="code-badge">@dept.Code</span></td>
+                            <td>@(dept.ParentDepartment?.NameAr ?? "—")</td>
+                            <td class="text-center">@dept.ChildDepartments.Count</td>
+                            <td>
+                                @if (dept.IsActive)
+                                {
+                                    <span class="hb-badge hb-badge-success">نشط</span>
+                                }
+                                else
+                                {
+                                    <span class="hb-badge hb-badge-secondary">غير نشط</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="action-btn edit" title="تعديل" disabled>
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button class="action-btn delete" title="حذف" disabled>
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@* ===== Add/Edit Modal ===== *@
+@if (_showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3><i class="bi bi-@(_editingDept != null ? "pencil-square" : "plus-circle")"></i> @(_editingDept != null ? "تعديل القسم" : "إضافة قسم جديد")</h3>
+                <button class="modal-close" @onclick="CloseModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <EditForm Model="_model" OnValidSubmit="HandleSave" FormName="DeptForm">
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="hb-alert hb-alert-danger" style="margin-bottom:1rem;">
+                            <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+                        </div>
+                    }
+                    <div class="form-grid">
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">اسم القسم *</label>
+                            <InputText @bind-Value="_model.NameAr" class="hb-form-control" placeholder="أدخل اسم القسم" />
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الرمز *</label>
+                            <InputText @bind-Value="_model.Code" class="hb-form-control" placeholder="مثال: DEP-OPS" />
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">القسم الرئيسي</label>
+                            <InputSelect @bind-Value="_model.ParentDepartmentId" class="hb-form-control">
+                                <option value="">-- بدون --</option>
+                                @foreach (var d in _departments.Where(d => _editingDept == null || d.Id != _editingDept.Id))
+                                {
+                                    <option value="@d.Id">@d.NameAr</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">الحالة</label>
+                            <InputSelect @bind-Value="_model.IsActive" class="hb-form-control">
+                                <option value="true">نشط</option>
+                                <option value="false">غير نشط</option>
+                            </InputSelect>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-hb-primary" disabled="@_saving">
+                        @if (_saving)
+                        {
+                            <span class="hb-spinner" style="width:18px;height:18px;border-width:2px;"></span>
+                            <span>جاري الحفظ...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-lg"></i>
+                            <span>@(_editingDept != null ? "تحديث" : "حفظ")</span>
+                        }
+                    </button>
+                    <button type="button" class="btn-hb-outline" @onclick="CloseModal">إلغاء</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@* ===== Delete Confirmation Modal ===== *@
+@if (_showDeleteModal)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-content modal-sm" @onclick:stopPropagation="true">
+            <div class="modal-header modal-header-danger">
+                <h3><i class="bi bi-exclamation-triangle"></i> تأكيد الحذف</h3>
+                <button class="modal-close" @onclick="CloseDeleteModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="hb-alert hb-alert-danger" style="margin-bottom:1rem;">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+                    </div>
+                }
+                <p class="delete-message">هل أنت متأكد من حذف القسم <strong>@_deletingDept?.NameAr</strong>؟</p>
+                <p class="delete-warning"><i class="bi bi-info-circle"></i> هذا الإجراء لا يمكن التراجع عنه.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-hb-danger" @onclick="HandleDelete" disabled="@_saving">
+                    @if (_saving)
+                    {
+                        <span class="hb-spinner" style="width:18px;height:18px;border-width:2px;"></span>
+                    }
+                    <i class="bi bi-trash3"></i> حذف
+                </button>
+                <button class="btn-hb-outline" @onclick="CloseDeleteModal">إلغاء</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Department> _departments = [];
+    private bool _loading = true;
+
+    // Modal state
+    private bool _showModal, _showDeleteModal, _saving;
+    private string? _successMessage, _errorMessage;
+    private Department? _editingDept;
+    private Department? _deletingDept;
+    private DeptFormModel _model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDepartments();
+    }
+
+    private async Task LoadDepartments()
+    {
+        _departments = await DbContext.Departments
+            .Include(d => d.ParentDepartment)
+            .Include(d => d.ChildDepartments)
+            .OrderBy(d => d.Code)
+            .ToListAsync();
+        _loading = false;
+    }
+
+    private void OpenAddModal()
+    {
+        _editingDept = null;
+        _model = new();
+        _errorMessage = null;
+        _showModal = true;
+    }
+
+    private void OpenEditModal(Department dept)
+    {
+        _editingDept = dept;
+        _model = new DeptFormModel
+        {
+            NameAr = dept.NameAr,
+            Code = dept.Code,
+            ParentDepartmentId = dept.ParentDepartmentId?.ToString(),
+            IsActive = dept.IsActive
+        };
+        _errorMessage = null;
+        _showModal = true;
+    }
+
+    private async Task HandleSave()
+    {
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_model.NameAr) || string.IsNullOrWhiteSpace(_model.Code))
+            {
+                _errorMessage = "يرجى إدخال اسم القسم والرمز";
+                return;
+            }
+
+            if (_editingDept != null)
+            {
+                _editingDept.NameAr = _model.NameAr;
+                _editingDept.Code = _model.Code;
+                _editingDept.ParentDepartmentId = string.IsNullOrEmpty(_model.ParentDepartmentId) ? null : Guid.Parse(_model.ParentDepartmentId);
+                _editingDept.IsActive = _model.IsActive;
+                DbContext.Departments.Update(_editingDept);
+                await DbContext.SaveChangesAsync();
+                _successMessage = $"تم تحديث القسم «{_model.NameAr}» بنجاح";
+            }
+            else
+            {
+                var dept = new Department
+                {
+                    Id = Guid.NewGuid(),
+                    NameAr = _model.NameAr,
+                    Code = _model.Code,
+                    ParentDepartmentId = string.IsNullOrEmpty(_model.ParentDepartmentId) ? null : Guid.Parse(_model.ParentDepartmentId),
+                    IsActive = _model.IsActive
+                };
+                DbContext.Departments.Add(dept);
+                await DbContext.SaveChangesAsync();
+                _successMessage = $"تم إضافة القسم «{_model.NameAr}» بنجاح";
+            }
+
+            _showModal = false;
+            await LoadDepartments();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"حدث خطأ: {ex.Message}";
+        }
+        finally { _saving = false; }
+    }
+
+    private void CloseModal() { _showModal = false; _errorMessage = null; }
+
+    private void OpenDeleteModal(Department dept)
+    {
+        _deletingDept = dept;
+        _errorMessage = null;
+        _showDeleteModal = true;
+    }
+
+    private async Task HandleDelete()
+    {
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            DbContext.Departments.Remove(_deletingDept!);
+            await DbContext.SaveChangesAsync();
+            _successMessage = $"تم حذف القسم «{_deletingDept!.NameAr}» بنجاح";
+            _showDeleteModal = false;
+            await LoadDepartments();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.InnerException?.Message?.Contains("REFERENCE") == true
+                ? "لا يمكن حذف هذا القسم لأنه مرتبط ببيانات أخرى"
+                : $"حدث خطأ: {ex.Message}";
+        }
+        finally { _saving = false; }
+    }
+
+    private void CloseDeleteModal() { _showDeleteModal = false; _errorMessage = null; }
+
+    private class DeptFormModel
+    {
+        public string NameAr { get; set; } = "";
+        public string Code { get; set; } = "";
+        public string? ParentDepartmentId { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

@@ -1,0 +1,467 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
+@using HBMail.Application.Common.Interfaces
+@using HBMail.Domain.Enums
+@using Microsoft.EntityFrameworkCore
+@inject IAppDbContext DbContext
+@inject ICurrentUserService CurrentUser
+
+<PageTitle>لوحة التحكم - بنك حضرموت</PageTitle>
+
+<div class="hb-home-page">
+    <!-- Welcome Banner -->
+    <section class="hb-hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-logo">
+                    <img src="Images/aboutLogo-fDwVp-So.svg" alt="بنك حضرموت" />
+                </div>
+                <h1 class="hero-title">مرحباً @(CurrentUser.FullName ?? "بالنظام")</h1>
+                <p class="hero-subtitle">
+                    <i class="bi bi-shield-check"></i>
+                    نظام البريد الداخلي — إدارة البريد الوارد والصادر
+                </p>
+            </div>
+        </div>
+        <div class="hero-pattern"></div>
+    </section>
+
+    <!-- Dashboard Stats -->
+    <section class="dashboard-section">
+        <div class="container">
+            <div class="stats-grid">
+                <a href="/mail" class="stat-card stat-total">
+                    <div class="stat-icon"><i class="bi bi-archive-fill"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_totalMails</span>
+                        <span class="stat-label">إجمالي البريد</span>
+                    </div>
+                </a>
+                <a href="/mail" class="stat-card stat-today">
+                    <div class="stat-icon"><i class="bi bi-calendar-check-fill"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_todayMails</span>
+                        <span class="stat-label">بريد اليوم</span>
+                    </div>
+                </a>
+                <a href="/mail" class="stat-card stat-pending">
+                    <div class="stat-icon"><i class="bi bi-hourglass-split"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_pendingMails</span>
+                        <span class="stat-label">بانتظار الاستلام</span>
+                    </div>
+                </a>
+                <a href="/mail" class="stat-card stat-urgent">
+                    <div class="stat-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_urgentMails</span>
+                        <span class="stat-label">عاجلة</span>
+                    </div>
+                </a>
+                <div class="stat-card stat-overdue">
+                    <div class="stat-icon"><i class="bi bi-clock-history"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-number">@_overdueMails</span>
+                        <span class="stat-label">متأخرة</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Weekly Activity + Status Distribution -->
+    <section class="charts-section">
+        <div class="container">
+            <div class="content-grid">
+                <!-- Weekly Activity Chart (Last 7 days) -->
+                <div class="hb-card chart-card">
+                    <h3 class="card-title"><i class="bi bi-bar-chart-fill"></i> نشاط الأسبوع</h3>
+                    <div class="bar-chart">
+                        @{
+                            var maxDayCount = _weeklyData.Values.Any() ? _weeklyData.Values.Max() : 1;
+                        }
+                        @foreach (var day in _weeklyData)
+                        {
+                            var heightPercent = maxDayCount > 0 ? (double)day.Value / maxDayCount * 100 : 0;
+                            <div class="bar-column">
+                                <span class="bar-value">@day.Value</span>
+                                <div class="bar-fill-wrapper">
+                                    <div class="bar-fill" style="height: @heightPercent.ToString("F0")%"></div>
+                                </div>
+                                <span class="bar-label">@day.Key</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Status Breakdown -->
+                <div class="status-breakdown-card hb-card">
+                    <h3 class="card-title"><i class="bi bi-pie-chart-fill"></i> توزيع الحالات</h3>
+                    @if (_totalMails > 0)
+                    {
+                        var completed = _statusBreakdown.Where(x => x.Key == MailStatus.Received || x.Key == MailStatus.Archived).Sum(x => x.Value);
+                        var pending = _statusBreakdown.Where(x => x.Key == MailStatus.Sent || x.Key == MailStatus.AssignedToStaff).Sum(x => x.Value);
+                        var rejected = _statusBreakdown.Where(x => x.Key == MailStatus.Rejected).Sum(x => x.Value);
+                        var ringTotal = _totalMails > 0 ? _totalMails : 1;
+                        var completedPct = (double)completed / ringTotal * 100;
+                        var pendingPct = (double)pending / ringTotal * 100;
+                        var rejectedPct = (double)rejected / ringTotal * 100;
+                        var completionRate = (double)completed / ringTotal * 100;
+                        <div class="status-ring-chart">
+                            <div class="ring-visual">
+                                <svg viewBox="0 0 36 36" class="ring-svg">
+                                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+                                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#2e7d32" stroke-width="3"
+                                            stroke-dasharray="@completedPct.ToString("F1") 100"
+                                            stroke-dashoffset="25" stroke-linecap="round"/>
+                                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e65100" stroke-width="3"
+                                            stroke-dasharray="@pendingPct.ToString("F1") 100"
+                                            stroke-dashoffset="@((25 - completedPct).ToString("F1"))" stroke-linecap="round"/>
+                                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#c62828" stroke-width="3"
+                                            stroke-dasharray="@rejectedPct.ToString("F1") 100"
+                                            stroke-dashoffset="@((25 - completedPct - pendingPct).ToString("F1"))" stroke-linecap="round"/>
+                                </svg>
+                                <div class="ring-center-text">
+                                    <span class="ring-pct">@completionRate.ToString("F0")%</span>
+                                    <span class="ring-sub">نسبة الإنجاز</span>
+                                </div>
+                            </div>
+                            <div class="ring-legend">
+                                <div class="legend-item"><span class="legend-dot" style="background:#2e7d32"></span> مكتمل (@completed)</div>
+                                <div class="legend-item"><span class="legend-dot" style="background:#e65100"></span> معلّق (@pending)</div>
+                                <div class="legend-item"><span class="legend-dot" style="background:#c62828"></span> مرفوض (@rejected)</div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-status">
+                            <i class="bi bi-inbox"></i>
+                            <p>لا يوجد بريد بعد</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Recent Mails + Type Distribution -->
+    <section class="dashboard-content">
+        <div class="container">
+            <div class="content-grid">
+                <!-- Recent Mails -->
+                <div class="recent-transactions-card hb-card">
+                    <div class="card-title-row">
+                        <h3 class="card-title"><i class="bi bi-clock-history"></i> آخر البريد</h3>
+                        <a href="/mail" class="view-all-link">عرض الكل <i class="bi bi-arrow-left"></i></a>
+                    </div>
+                    @if (_recentMails.Any())
+                    {
+                        <div class="recent-list">
+                            @foreach (var tx in _recentMails)
+                            {
+                                <a href="/mail/@tx.Id" class="recent-item">
+                                    <div class="recent-item-icon">
+                                        <i class="bi @GetTypeIcon(tx.Type)"></i>
+                                    </div>
+                                    <div class="recent-item-info">
+                                        <span class="recent-item-ref">@tx.ReferenceNumber</span>
+                                        <span class="recent-item-subject">@tx.Subject</span>
+                                    </div>
+                                    <div class="recent-item-meta">
+                                        <span class="hb-badge hb-badge-@GetStatusBadge(tx.Status)">@GetStatusLabel(tx.Status)</span>
+                                        <span class="recent-item-date">@AppTime.FormatYemen(tx.CreatedAt, "MM/dd HH:mm")</span>
+                                    </div>
+                                </a>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-recent">
+                            <i class="bi bi-file-earmark-x"></i>
+                            <p>لا يوجد بريد حديث</p>
+                        </div>
+                    }
+                </div>
+
+                <!-- Type Distribution -->
+                <div class="hb-card chart-card">
+                    <h3 class="card-title"><i class="bi bi-diagram-3-fill"></i> توزيع الأنواع</h3>
+                    <div class="type-distribution">
+                        @foreach (var item in _typeBreakdown.OrderByDescending(x => x.Value))
+                        {
+                            var percent = _totalMails > 0 ? (double)item.Value / _totalMails * 100 : 0;
+                            <div class="type-item">
+                                <div class="type-icon-wrap @GetTypeColorClass(item.Key)">
+                                    <i class="bi @GetTypeIcon(item.Key)"></i>
+                                </div>
+                                <div class="type-details">
+                                    <div class="type-header">
+                                        <span class="type-name">@GetTypeLabel(item.Key)</span>
+                                        <span class="type-count">@item.Value <small>(@percent.ToString("F0")%)</small></span>
+                                    </div>
+                                    <div class="type-bar-track">
+                                        <div class="type-bar-fill @GetTypeColorClass(item.Key)" style="width: @percent.ToString("F0")%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        @if (!_typeBreakdown.Any())
+                        {
+                            <div class="empty-status"><i class="bi bi-inbox"></i><p>لا يوجد بيانات</p></div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Actions -->
+    <section class="quick-actions-section">
+        <div class="container">
+            <h2 class="hb-section-title">إجراءات سريعة</h2>
+            <div class="actions-grid">
+                <a href="/mail/compose" class="action-card">
+                    <div class="action-icon action-icon-primary"><i class="bi bi-plus-circle-fill"></i></div>
+                    <h3>إرسال بريد</h3>
+                    <p>إنشاء بريد جديد</p>
+                </a>
+                <a href="/mail" class="action-card">
+                    <div class="action-icon action-icon-gold"><i class="bi bi-envelope-fill"></i></div>
+                    <h3>صندوق البريد</h3>
+                    <p>عرض جميع البريد</p>
+                </a>
+                <a href="/reports" class="action-card">
+                    <div class="action-icon action-icon-purple"><i class="bi bi-graph-up-arrow"></i></div>
+                    <h3>التقارير</h3>
+                    <p>تقارير وإحصائيات البريد</p>
+                </a>
+                <a href="/archive" class="action-card">
+                    <div class="action-icon action-icon-secondary"><i class="bi bi-archive-fill"></i></div>
+                    <h3>الأرشيف</h3>
+                    <p>البريد المؤرشفة</p>
+                </a>
+                <AuthorizeView Roles="SuperAdmin,ITAdmin">
+                    <a href="/branches" class="action-card">
+                        <div class="action-icon action-icon-success"><i class="bi bi-building"></i></div>
+                        <h3>الفروع</h3>
+                        <p>إدارة فروع البنك</p>
+                    </a>
+                    <a href="/departments" class="action-card">
+                        <div class="action-icon action-icon-info"><i class="bi bi-diagram-3-fill"></i></div>
+                        <h3>الأقسام</h3>
+                        <p>إدارة الأقسام والإدارات</p>
+                    </a>
+                    <a href="/users" class="action-card">
+                        <div class="action-icon action-icon-warning"><i class="bi bi-people-fill"></i></div>
+                        <h3>المستخدمين</h3>
+                        <p>إدارة حسابات المستخدمين</p>
+                    </a>
+                    <a href="/audit-log" class="action-card">
+                        <div class="action-icon action-icon-danger"><i class="bi bi-clipboard-data-fill"></i></div>
+                        <h3>سجل التدقيق</h3>
+                        <p>سجل العمليات والتغييرات</p>
+                    </a>
+                </AuthorizeView>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+@code {
+    private int _totalMails, _todayMails, _pendingMails, _urgentMails, _overdueMails;
+    private Dictionary<MailStatus, int> _statusBreakdown = [];
+    private Dictionary<MailType, int> _typeBreakdown = [];
+    private Dictionary<string, int> _weeklyData = [];
+    private List<HBMail.Domain.Entities.Mail> _recentMails = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var now = DateTime.UtcNow;
+
+        var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin" };
+        var hasGlobalAccess = globalRoles.Any(r => CurrentUser.IsInRole(r));
+
+        IQueryable<HBMail.Domain.Entities.Mail> Mails = DbContext.Mails.AsNoTracking();
+
+        if (!hasGlobalAccess)
+        {
+            var userId = CurrentUser.UserId;
+            var branchId = CurrentUser.BranchId;
+            var deptId = CurrentUser.DepartmentId;
+            var isDeptManager = CurrentUser.IsInRole("DepartmentManager") || CurrentUser.IsInRole("DepartmentStaff");
+
+            var isAdminAffairs = false;
+            if (deptId.HasValue)
+            {
+                isAdminAffairs = await DbContext.Departments.AsNoTracking()
+                    .AnyAsync(d => d.Id == deptId.Value && d.Code == "DEP-ADM");
+            }
+
+            // تحميل معرّفات البريد المنسوخ إلى المستخدم (CC)
+            var ccMailIds = await DbContext.MailCCs.AsNoTracking()
+                .Where(cc => cc.UserId == userId)
+                .Select(cc => cc.MailId)
+                .ToListAsync();
+
+            if (isAdminAffairs)
+            {
+                Mails = Mails.Where(t =>
+                    t.Status == MailStatus.Sent ||
+                    t.Status == MailStatus.AssignedToStaff ||
+                    t.CreatedByUserId == userId ||
+                    t.SenderUserId == userId ||
+                    t.ReceiverUserId == userId ||
+                    ccMailIds.Contains(t.Id));
+            }
+            else if (isDeptManager && deptId.HasValue)
+            {
+                Mails = Mails.Where(t =>
+                    t.CreatedByUserId == userId ||
+                    t.SenderUserId == userId ||
+                    t.ReceiverUserId == userId ||
+                    t.ManagerNotifiedUserId == userId ||
+                    t.SenderDepartmentId == deptId ||
+                    t.ReceiverDepartmentId == deptId ||
+                    ccMailIds.Contains(t.Id));
+            }
+            else
+            {
+                Mails = Mails.Where(t =>
+                    t.CreatedByUserId == userId ||
+                    t.SenderUserId == userId ||
+                    (branchId.HasValue && (t.SenderBranchId == branchId || t.ReceiverBranchId == branchId)) ||
+                    t.ReceiverUserId == userId ||
+                    t.ManagerNotifiedUserId == userId ||
+                    ccMailIds.Contains(t.Id));
+            }
+        }
+
+        _totalMails = await Mails.CountAsync();
+        _todayMails = await Mails.CountAsync(t => t.CreatedAt.Date == now.Date);
+        _pendingMails = await Mails.CountAsync(t => t.Status == MailStatus.Sent || t.Status == MailStatus.AssignedToStaff);
+        _urgentMails = await Mails.CountAsync(t => t.Priority >= MailPriority.Urgent && (t.Status == MailStatus.Sent || t.Status == MailStatus.AssignedToStaff));
+        _overdueMails = await Mails.CountAsync(t => t.DueDate.HasValue && t.DueDate < now && (t.Status == MailStatus.Sent || t.Status == MailStatus.AssignedToStaff));
+
+        _statusBreakdown = await Mails
+            .GroupBy(t => t.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Status, x => x.Count);
+
+        _typeBreakdown = await Mails
+            .GroupBy(t => t.Type)
+            .Select(g => new { Type = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Type, x => x.Count);
+
+        // Weekly data: current week starting from Saturday
+        var today = now.Date;
+        var daysSinceSaturday = ((int)today.DayOfWeek + 1) % 7;
+        var weekStartSat = today.AddDays(-daysSinceSaturday);
+        var weekEndFri = weekStartSat.AddDays(6);
+
+        var weeklyRaw = await Mails
+            .Where(t => t.CreatedAt.Date >= weekStartSat && t.CreatedAt.Date <= weekEndFri)
+            .GroupBy(t => t.CreatedAt.Date)
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var dayNames = new[] { "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت" };
+        var weekOrder = new[] { DayOfWeek.Saturday, DayOfWeek.Sunday, DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
+        _weeklyData = new Dictionary<string, int>();
+        foreach (var dow in weekOrder)
+        {
+            var date = weekStartSat.AddDays(((int)dow + 1) % 7);
+            var dayName = dayNames[(int)dow];
+            var count = weeklyRaw.FirstOrDefault(x => x.Date == date)?.Count ?? 0;
+            _weeklyData[dayName] = count;
+        }
+
+        _recentMails = await Mails
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(8)
+            .ToListAsync();
+    }
+
+    private static string GetStatusLabel(MailStatus s) => s switch
+    {
+        MailStatus.Sent => "بانتظار الاستلام",
+        MailStatus.AssignedToStaff => "موجَّه لموظف",
+        MailStatus.Received => "تم الاستلام",
+        MailStatus.Rejected => "مرفوض",
+        MailStatus.Archived => "مؤرشف",
+        _ => s.ToString()
+    };
+
+    private static string GetStatusBadge(MailStatus s) => s switch
+    {
+        MailStatus.Sent => "warning",
+        MailStatus.AssignedToStaff => "info",
+        MailStatus.Received => "success",
+        MailStatus.Rejected => "danger",
+        MailStatus.Archived => "archived",
+        _ => "secondary"
+    };
+
+    private static string GetStatusBarClass(MailStatus s) => s switch
+    {
+        MailStatus.Sent => "bar-warning",
+        MailStatus.AssignedToStaff => "bar-info",
+        MailStatus.Received => "bar-success",
+        MailStatus.Rejected => "bar-danger",
+        MailStatus.Archived => "bar-archived",
+        _ => "bar-gray"
+    };
+
+    private static string GetStatusIconClass(MailStatus s) => s switch
+    {
+        MailStatus.Sent => "bi bi-send-fill",
+        MailStatus.AssignedToStaff => "bi bi-person-check",
+        MailStatus.Received => "bi bi-check-circle-fill",
+        MailStatus.Rejected => "bi bi-x-octagon-fill",
+        MailStatus.Archived => "bi bi-archive-fill",
+        _ => "bi bi-circle"
+    };
+
+    private static string GetStatusToneClass(MailStatus s) => s switch
+    {
+        MailStatus.Sent => "tone-warning",
+        MailStatus.AssignedToStaff => "tone-info",
+        MailStatus.Received => "tone-success",
+        MailStatus.Rejected => "tone-danger",
+        MailStatus.Archived => "tone-archived",
+        _ => "tone-gray"
+    };
+
+    private static string GetTypeIcon(MailType t) => t switch
+    {
+        MailType.BranchToBranch => "bi-arrow-left-right",
+        MailType.CashTransfer => "bi-cash-stack",
+        MailType.DocumentDelivery => "bi-file-earmark-arrow-up",
+        MailType.InternalDepartment => "bi-diagram-3",
+        _ => "bi-file-earmark-text"
+    };
+
+    private static string GetTypeLabel(MailType t) => t switch
+    {
+        MailType.DocumentDelivery => "تسليم مستندات",
+        MailType.CashTransfer => "تحويل نقدي",
+        MailType.InternalDepartment => "بريد بين الإدارات",
+        MailType.BranchToBranch => "بين فرعين",
+        MailType.Other => "أخرى",
+        _ => t.ToString()
+    };
+
+    private static string GetTypeColorClass(MailType t) => t switch
+    {
+        MailType.DocumentDelivery => "type-color-primary",
+        MailType.CashTransfer => "type-color-success",
+        MailType.InternalDepartment => "type-color-warning",
+        MailType.BranchToBranch => "type-color-info",
+        MailType.Other => "type-color-secondary",
+        _ => "type-color-secondary"
+    };
+}
