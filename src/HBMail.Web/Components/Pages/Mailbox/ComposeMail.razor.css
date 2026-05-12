@@ -80,6 +80,38 @@
     .form-grid {
         grid-template-columns: 1fr;
     }
+    .form-layout { padding: 0 0.25rem; }
+    .form-actions { flex-direction: column-reverse; gap: 0.6rem; margin-top: 1.25rem; padding-top: 1rem; }
+    .form-actions > * { width: 100%; justify-content: center; text-align: center; }
+}
+
+@media (max-width: 576px) {
+    .sender-info-banner { padding: 0.65rem 0.75rem; }
+    .sender-readonly { font-size: 0.85rem; gap: 0.5rem 0.75rem; }
+    .sender-readonly .sender-name { font-size: 0.9rem; }
+    .sender-readonly .sender-meta { font-size: 0.8rem; }
+
+    .cc-input-area { padding: 0.4rem 0.6rem; min-height: 42px; }
+    .cc-search-input { min-width: 80px; font-size: 0.88rem; }
+    .cc-tag { font-size: 0.72rem; padding: 0.08rem 0.3rem 0.08rem 0.45rem; }
+    .cc-dropdown { max-height: 200px; }
+    .cc-dropdown-item { padding: 0.65rem 0.6rem; font-size: 0.85rem; }
+
+    .upload-dropzone-inner { padding: 1.25rem 0.75rem; }
+    .upload-icon { width: 44px; height: 44px; font-size: 1.5rem; }
+    .upload-title { font-size: 0.88rem; }
+    .upload-hint { font-size: 0.75rem; }
+
+    .pending-files-header { font-size: 0.8rem; padding: 0.5rem 0.65rem; }
+    .pending-file-item { padding: 0.45rem 0.5rem; gap: 0.5rem; }
+    .pf-icon { width: 32px; height: 32px; font-size: 0.95rem; }
+    .pf-name { font-size: 0.8rem; }
+    .pf-size { font-size: 0.7rem; }
+
+    .require-doc-toggle { padding: 0.65rem 0.75rem; }
+    .toggle-label { gap: 0.5rem; }
+    .toggle-text strong { font-size: 0.88rem; }
+    .toggle-text small { font-size: 0.78rem; }
 }
 
 /* === New simplified workflow styles === */

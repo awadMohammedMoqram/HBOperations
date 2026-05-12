@@ -626,3 +626,22 @@ img, video, canvas, svg { max-width: 100%; height: auto; }
 @media (max-width: 768px) {
     .admin-container { padding-left: 0.75rem !important; padding-right: 0.75rem !important; padding-top: 0.75rem !important; }
 }
+
+/* ============================================================
+   25. Global touch-friendly controls on mobile
+   ============================================================ */
+@media (max-width: 576px) {
+    /* Increase touch targets */
+    select, input[type="text"], input[type="search"], input[type="date"], textarea {
+        min-height: 44px !important;
+        font-size: 16px !important; /* Prevent iOS zoom */
+    }
+    button { min-height: 44px; }
+
+    /* Reduce section gaps */
+    .hb-section { margin-bottom: 1rem; }
+    .section-card { padding: 0.85rem !important; border-radius: 10px; }
+
+    /* Modal full width on phone */
+    .modal-content, .modal-container { max-width: 100% !important; margin: 0.5rem !important; border-radius: 12px !important; }
+}

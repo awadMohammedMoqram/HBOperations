@@ -363,6 +363,22 @@
     }
 }
 
+@media (max-width: 576px) {
+    .filter-card { padding: 0.75rem !important; }
+    .stats-bar { gap: 0.5rem; }
+    .stat-item { padding: 0.65rem 0.75rem; border-radius: 8px; }
+    .stat-label { font-size: 0.75rem; }
+    .stat-value { font-size: 1.15rem; }
+    .pagination-container { padding: 0.85rem 1rem; }
+    .pagination-info { font-size: 0.78rem; text-align: center; }
+    .pagination-btn { padding: 0.4rem 0.65rem; font-size: 0.8rem; min-width: 36px; }
+    .subject-cell { max-width: none; white-space: normal; }
+    .empty-state { padding: 2.5rem 1.25rem; }
+    .empty-state i { font-size: 3rem; }
+    .empty-state h3 { font-size: 1.05rem; }
+    .empty-state p { font-size: 0.85rem; }
+}
+
 /* Pagination */
 .pagination-container {
     display: flex;
