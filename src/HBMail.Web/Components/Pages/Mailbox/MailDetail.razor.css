@@ -61,21 +61,7 @@
 .aeb-meta span { display: inline-flex; align-items: center; gap: 0.35rem; }
 .aeb-meta i { font-size: 0.9rem; }
 
-/* Receipt confirmation: note (full width) + datetime stacked */
-.action-receipt-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    width: 100%;
-}
-.action-receipt-stack .action-note-input,
-.action-receipt-stack .action-receipt-time,
-.action-receipt-stack .action-receipt-docs { width: 100%; }
-.action-receipt-stack .action-note-input .hb-form-control,
-.action-receipt-stack textarea.note-textarea { width: 100%; max-width: 100%; }
-.action-receipt-time { display: flex; flex-direction: column; gap: 0.4rem; max-width: 360px; }
-.action-receipt-time .hb-form-help { color: #6c757d; font-size: 0.8rem; }
+/* Receipt confirmation: stacked layout */
 
 /* Receiver upload area */
 .action-receipt-docs {
@@ -280,12 +266,157 @@
     border-right: 4px solid #d4af37;
 }
 
-.action-note-input {
-    margin-bottom: 1rem;
+.action-role-hint {
+    font-size: 0.88rem;
+    color: #5a6570;
+    line-height: 1.7;
+    margin-bottom: 1.25rem;
+    padding: 0.75rem 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #eef1f5;
 }
 
-.action-note-input .hb-form-control {
-    max-width: 500px;
+/* ── Option Cards ── */
+.action-option-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.action-option-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.action-option-header {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.action-option-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+.icon-forward {
+    background: linear-gradient(135deg, #eef3fb, #dce6f7);
+    color: #003d7a;
+}
+.icon-receive {
+    background: linear-gradient(135deg, #e6f6ec, #c8ebd4);
+    color: #1e7e34;
+}
+
+.action-option-title-group h4 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+.action-option-title-group p {
+    margin: 0.15rem 0 0;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.action-option-body {
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.action-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.action-field .hb-form-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #374151;
+}
+.action-field .hb-form-control {
+    width: 100%;
+    max-width: 100%;
+}
+.action-field .datetime-input {
+    max-width: 280px;
+}
+.action-field .note-textarea {
+    width: 100%;
+    max-width: 100%;
+    resize: vertical;
+}
+
+.action-option-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 0.85rem 1.25rem;
+    background: #fafbfc;
+    border-top: 1px solid #f1f5f9;
+}
+
+/* ── "أو" Divider ── */
+.action-or-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1.15rem 0;
+}
+.action-or-divider::before,
+.action-or-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #d1d5db, transparent);
+}
+.action-or-divider span {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #94a3b8;
+    background: white;
+    padding: 0.25rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    letter-spacing: 0.5px;
+}
+
+/* ── Forward card accent ── */
+.action-option-forward {
+    border-color: #dce6f7;
+}
+.action-option-forward .action-option-footer {
+    background: #f8fafd;
+}
+
+/* ── Receive card accent ── */
+.action-option-receive {
+    border-color: #c8ebd4;
+}
+.action-option-receive .action-option-footer {
+    background: #f7fcf9;
+}
+
+/* ── Reject only card ── */
+.action-option-reject .action-option-footer {
+    background: transparent;
+    border-top: none;
+    padding: 1rem 1.25rem;
 }
 
 .workflow-actions {
@@ -1526,6 +1657,65 @@
 .pf-remove { background: transparent; border: none; color: #6b7280; width: 30px; height: 30px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
 .pf-remove:hover { background: #fdecec; color: #d32f2f; }
 .pending-files-card .hb-form-help { display: block; padding: 0.5rem 0.9rem; background: #f7f9fc; border-top: 1px solid #e3e7ed; color: #4b5563; }
+
+/* === Receiver Upload Area === */
+.receiver-upload-area {
+    position: relative;
+    border: 2px dashed #003d7a;
+    border-radius: 12px;
+    padding: 1.5rem 1rem;
+    text-align: center;
+    transition: all 0.25s ease;
+    background: #f0f5ff;
+    cursor: pointer;
+}
+.receiver-upload-area:hover { border-color: #d4af37; background: #fafbfc; }
+.receiver-upload-area.has-file { border-style: solid; border-color: #28a745; background: #f6fff8; padding: 0.8rem; }
+
+.upload-icon-wrapper {
+    width: 48px; height: 48px;
+    margin: 0 auto 0.6rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #e8f0fe 0%, #d4e4fc 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; color: #003d7a;
+}
+.upload-label { font-weight: 600; color: #333; font-size: 0.9rem; margin-bottom: 0.25rem; }
+.upload-hint { color: #6b7280; font-size: 0.78rem; margin: 0; }
+
+.upload-input-overlay {
+    position: absolute; inset: 0;
+    width: 100% !important; height: 100% !important;
+    opacity: 0 !important; cursor: pointer;
+    z-index: 2;
+}
+
+.optional-hint { font-size: 0.8rem; color: #6b7280; font-weight: 400; }
+
+/* Uploaded file card */
+.uploaded-file-card {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    background: #fff; border: 1px solid #e0e7ef;
+    border-radius: 8px; width: 100%;
+}
+.uploaded-file-icon {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    background: #fde8e8;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; color: #dc3545;
+}
+.uploaded-file-info { flex: 1; text-align: right; }
+.uploaded-file-name { display: block; font-size: 0.85rem; font-weight: 600; color: #333; }
+.uploaded-file-size { font-size: 0.75rem; color: #6b7280; }
+.uploaded-file-remove {
+    background: none; border: none;
+    width: 32px; height: 32px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: #6b7280; cursor: pointer; transition: all 0.15s;
+}
+.uploaded-file-remove:hover { background: #fdecec; color: #dc3545; }
 
 /* === CC Read-Only Banner === */
 .cc-readonly-banner { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: 10px; background: #e8f4fd; border: 1px solid #b6d8f2; color: #1565c0; font-size: 0.9rem; }

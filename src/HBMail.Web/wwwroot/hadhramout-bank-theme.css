@@ -108,6 +108,7 @@ body::before {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    text-decoration: none;
 }
 
 .btn-hb-primary:hover {

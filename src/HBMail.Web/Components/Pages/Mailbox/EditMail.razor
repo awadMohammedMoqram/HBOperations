@@ -12,6 +12,12 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+@inject INotificationService NotificationService
+@inject IFileStorageService FileStorage
+@inject IFileValidationService FileValidation
+@inject IPdfCompressionService PdfCompression
+@inject HBMail.Web.Services.ToastService Toast
+@inject ILogger<EditMail> Logger
 
 <PageTitle>تعديل البريد - بنك حضرموت</PageTitle>
 
@@ -22,8 +28,7 @@
         </button>
         <div class="centered-title-block">
             <h1 class="section-title">
-                <i class="bi bi-pencil-square"></i>
-                @(_isAdminMode ? "تعديل إداري للبريد" : "تعديل البريد")
+                <i class="bi bi-pencil-square"></i> تعديل البريد
             </h1>
             <p class="section-subtitle">@_transaction?.ReferenceNumber</p>
         </div>
@@ -54,7 +59,7 @@
     {
         <div class="hb-alert hb-alert-danger">
             <i class="bi bi-exclamation-triangle-fill"></i>
-            البريد غير موجودة، أو لا يمكن تعديلها (مؤرشفة أو ليس لديك صلاحية).
+            البريد غير موجود، أو لا يمكن تعديله (ليس لديك صلاحية).
         </div>
     }
     else
@@ -63,39 +68,49 @@
             <div class="hb-card">
                 <div class="hb-card-header">
                     <h2 class="hb-card-title">
-                        <i class="bi bi-file-earmark-text"></i>
-                        @(_isAdminMode ? "بيانات البريد (وضع المدير)" : "بيانات البريد")
+                        <i class="bi bi-file-earmark-text"></i> بيانات البريد
                     </h2>
                 </div>
 
-                @if (_isAdminMode)
-                {
-                    <div class="info-banner info-banner-admin">
-                        <i class="bi bi-shield-lock-fill"></i>
-                        أنت تُعدّل هذا البريد بصلاحية <strong>مدير النظام</strong>.
-                        سيُسجَّل اسمك وتاريخ التعديل ويظهر بوضوح في تفاصيل البريد.
-                    </div>
-                }
-                else
-                {
-                    <div class="info-banner">
-                        <i class="bi bi-info-circle-fill"></i>
-                        التعديل متاح فقط للمُنشئ، وفقط طالما البريد في حالة "بانتظار الاستلام".
-                    </div>
-                }
+                <div class="info-banner">
+                    <i class="bi bi-info-circle-fill"></i>
+                    التعديل متاح فقط للمرسل، وفقط طالما البريد في حالة "بانتظار الاستلام".
+                </div>
 
                 <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="EditTransaction">
                     <div class="form-grid">
+                        <!-- المرسل (للقراءة فقط) -->
+                        <div class="hb-form-group full-width sender-info-banner">
+                            <label class="hb-form-label">
+                                <i class="bi bi-person-badge"></i> المرسل
+                            </label>
+                            <div class="sender-readonly">
+                                <span class="sender-name">@(CurrentUser.FullName ?? CurrentUser.UserName)</span>
+                                @if (_currentBranchName is not null)
+                                {
+                                    <span class="sender-meta"><i class="bi bi-building"></i> @_currentBranchName</span>
+                                }
+                                @if (_currentDepartmentName is not null)
+                                {
+                                    <span class="sender-meta"><i class="bi bi-diagram-3"></i> @_currentDepartmentName</span>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- الموضوع -->
                         <div class="hb-form-group full-width">
                             <label class="hb-form-label">الموضوع <span class="required-star">*</span></label>
-                            <InputText @bind-Value="_model.Subject" class="hb-form-control" />
+                            <InputText @bind-Value="_model.Subject" class="hb-form-control" placeholder="أدخل موضوع البريد" />
                         </div>
 
+                        <!-- الوصف -->
                         <div class="hb-form-group full-width">
                             <label class="hb-form-label">الوصف</label>
-                            <InputTextArea @bind-Value="_model.Description" class="hb-form-control textarea" rows="3" />
+                            <InputTextArea @bind-Value="_model.Description" class="hb-form-control textarea" rows="3"
+                                           placeholder="وصف تفصيلي للبريد (اختياري)" />
                         </div>
 
+                        <!-- نوع البريد -->
                         <div class="hb-form-group">
                             <label class="hb-form-label">نوع البريد <span class="required-star">*</span></label>
                             <InputSelect @bind-Value="_model.Type" class="hb-form-control">
@@ -106,6 +121,7 @@
                             </InputSelect>
                         </div>
 
+                        <!-- الأولوية -->
                         <div class="hb-form-group">
                             <label class="hb-form-label">الأولوية <span class="required-star">*</span></label>
                             <InputSelect @bind-Value="_model.Priority" class="hb-form-control">
@@ -116,68 +132,234 @@
                             </InputSelect>
                         </div>
 
+                        <!-- الفرع المستلِم -->
                         <div class="hb-form-group">
-                            <label class="hb-form-label">تاريخ الإرسال الفعلي <span class="required-star">*</span></label>
-                            <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_model.SentAt" class="hb-form-control" />
+                            <label class="hb-form-label">الفرع المستلِم <span class="required-star">*</span></label>
+                            <InputSelect @bind-Value="_model.ReceiverBranchId" class="hb-form-control"
+                                         @bind-Value:after="OnReceiverBranchChanged">
+                                <option value="">-- اختر الفرع --</option>
+                                @foreach (var b in _branches)
+                                {
+                                    <option value="@b.Id">@b.NameAr</option>
+                                }
+                            </InputSelect>
                         </div>
 
+                        <!-- الإدارة المستلِمة (للإدارة العامة فقط) -->
+                        @if (_isHqSelected)
+                        {
+                            <div class="hb-form-group">
+                                <label class="hb-form-label">الإدارة المستلِمة <span class="required-star">*</span></label>
+                                <InputSelect @bind-Value="_model.ReceiverDepartmentId" class="hb-form-control"
+                                             @bind-Value:after="OnReceiverDepartmentChanged">
+                                    <option value="">-- اختر الإدارة --</option>
+                                    @foreach (var d in _departments)
+                                    {
+                                        <option value="@d.Id">@d.NameAr</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        }
+
+                        <!-- الشخص المستلِم -->
                         <div class="hb-form-group">
-                            <label class="hb-form-label">تاريخ الاستحقاق</label>
+                            <label class="hb-form-label">الشخص المستلِم <span class="required-star">*</span></label>
+                            <InputSelect @bind-Value="_model.ReceiverUserId" class="hb-form-control" disabled="@(_receiverUsers.Count == 0)">
+                                <option value="">@GetReceiverPlaceholder()</option>
+                                @foreach (var u in _receiverUsers)
+                                {
+                                    <option value="@u.Id">@u.FullNameAr @(string.IsNullOrEmpty(u.JobTitle) ? "" : $"— {u.JobTitle}")</option>
+                                }
+                            </InputSelect>
+                            <small class="hb-form-help">@GetReceiverHelp()</small>
+                        </div>
+
+                        <!-- نسخة إلى CC -->
+                        <div class="hb-form-group full-width">
+                            <label class="hb-form-label">
+                                <i class="bi bi-people"></i> نسخة إلى (CC) <span class="optional-badge">اختياري</span>
+                            </label>
+                            <div class="cc-multiselect">
+                                <div class="cc-input-area" @onclick="() => _ccDropdownOpen = true">
+                                    @if (_selectedCcIds.Count > 0)
+                                    {
+                                        @foreach (var ccId in _selectedCcIds)
+                                        {
+                                            var user = _ccCandidates.FirstOrDefault(u => u.Id == ccId);
+                                            if (user != null)
+                                            {
+                                                <span class="cc-tag">
+                                                    @user.FullNameAr
+                                                    <button type="button" class="cc-tag-remove" @onclick="() => RemoveCc(ccId)" @onclick:stopPropagation="true"><i class="bi bi-x"></i></button>
+                                                </span>
+                                            }
+                                        }
+                                    }
+                                    <input type="text" class="cc-search-input" placeholder="@(_selectedCcIds.Count == 0 ? "ابحث واختر أشخاص..." : "ابحث...")"
+                                           @bind="_ccSearchTerm" @bind:event="oninput"
+                                           @onfocus="() => _ccDropdownOpen = true" />
+                                </div>
+                                @if (_ccDropdownOpen)
+                                {
+                                    <div class="cc-dropdown-backdrop" @onclick="() => _ccDropdownOpen = false"></div>
+                                    <div class="cc-dropdown">
+                                        @{ var filtered = GetFilteredCcCandidates(); }
+                                        @if (!filtered.Any())
+                                        {
+                                            <div class="cc-dropdown-empty">لا توجد نتائج</div>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var u in filtered)
+                                            {
+                                                var isSelected = _selectedCcIds.Contains(u.Id);
+                                                <div class="cc-dropdown-item @(isSelected ? "selected" : "")" @onclick="() => ToggleCcUser(u.Id)">
+                                                    <i class="bi @(isSelected ? "bi-check-square-fill" : "bi-square")"></i>
+                                                    <span class="cc-dropdown-name">@u.FullNameAr</span>
+                                                    @if (!string.IsNullOrEmpty(u.JobTitle))
+                                                    {
+                                                        <span class="cc-dropdown-role">— @u.JobTitle</span>
+                                                    }
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <small class="hb-form-help">ابحث بالاسم واختر أكثر من شخص. سيحصلون على إشعار + قراءة فقط.</small>
+                        </div>
+
+                        <!-- تاريخ الإرسال الفعلي -->
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">
+                                <i class="bi bi-clock-history"></i> تاريخ الإرسال الفعلي <span class="required-star">*</span>
+                            </label>
+                            <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_model.SentAt" class="hb-form-control" />
+                            <small class="hb-form-help">وقت الإرسال الفعلي للبريد.</small>
+                        </div>
+
+                        <!-- تاريخ الاستحقاق -->
+                        <div class="hb-form-group">
+                            <label class="hb-form-label">تاريخ الاستحقاق (اختياري)</label>
                             <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_model.DueDate" class="hb-form-control" />
                         </div>
 
-                        @if (_isAdminMode && _transaction!.ReceivedAt.HasValue)
-                        {
-                            <div class="hb-form-group">
-                                <label class="hb-form-label">
-                                    <i class="bi bi-check2-circle"></i> تاريخ الاستلام الفعلي
-                                </label>
-                                <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_model.ReceivedAt" class="hb-form-control" />
-                                <small class="hb-form-help">تعديل وقت الاستلام (إداري فقط)</small>
-                            </div>
-                        }
-
-                        <div class="hb-form-group full-width">
-                            <label class="hb-form-label">
-                                <i class="bi bi-chat-left-text"></i> ملاحظة المرسل
-                            </label>
-                            <InputTextArea @bind-Value="_model.SenderNote" class="hb-form-control note-textarea" rows="3" maxlength="1000" />
-                        </div>
-
-                        @if (_isAdminMode)
-                        {
-                            <div class="hb-form-group full-width">
-                                <label class="hb-form-label">
-                                    <i class="bi bi-chat-left-dots"></i> ملاحظة المستلم
-                                </label>
-                                <InputTextArea @bind-Value="_model.ReceiverNote" class="hb-form-control note-textarea" rows="3" maxlength="1000" />
-                            </div>
-
-                            <div class="hb-form-group full-width admin-edit-reason">
-                                <label class="hb-form-label">
-                                    <i class="bi bi-pencil-square"></i> سبب التعديل الإداري <span class="required-star">*</span>
-                                </label>
-                                <InputTextArea @bind-Value="_model.AdminEditReason" class="hb-form-control note-textarea" rows="3" maxlength="500"
-                                               placeholder="اذكر سبب تعديلك لهذا البريد (سيُحفظ في السجل)..." />
-                            </div>
-                        }
-
+                        <!-- اشتراط رفع مستند -->
                         <div class="hb-form-group full-width require-doc-toggle">
                             <label class="toggle-label">
                                 <InputCheckbox @bind-Value="_model.RequireReceiverDocument" />
                                 <span class="toggle-text">
                                     <strong><i class="bi bi-file-earmark-check"></i> اشتراط رفع مستند إثبات استلام</strong>
-                                    <small>يمكنك تغيير هذا الإعداد طالما لم تُستلَم البريد بعد.</small>
+                                    <small>عند التفعيل، لن يستطيع المستلم تأكيد الاستلام دون رفع مستند إثبات.</small>
                                 </span>
                             </label>
                         </div>
+
+                        <!-- ملاحظة المرسل -->
+                        <div class="hb-form-group full-width">
+                            <label class="hb-form-label">
+                                <i class="bi bi-chat-left-text"></i> ملاحظة المرسل (اختياري)
+                            </label>
+                            <InputTextArea @bind-Value="_model.SenderNote" class="hb-form-control textarea" rows="2"
+                                           maxlength="1000"
+                                           placeholder="أي ملاحظة تود إرسالها للمستلم مع البريد..." />
+                            <small class="hb-form-help">ستظهر للمستلم في صفحة تفاصيل البريد.</small>
+                        </div>
+
+                        <!-- المرفقات -->
+                        <div class="hb-form-group full-width">
+                            <label class="hb-form-label">
+                                <i class="bi bi-paperclip"></i> المرفقات (اختياري)
+                            </label>
+
+                            @if (_existingDocuments.Count > 0)
+                            {
+                                <div class="pending-files-card" style="margin-bottom:0.8rem;">
+                                    <div class="pending-files-header">
+                                        <span><i class="bi bi-files"></i> المرفقات الحالية (@_existingDocuments.Count)</span>
+                                    </div>
+                                    <ul class="pending-files-list">
+                                        @foreach (var doc in _existingDocuments)
+                                        {
+                                            <li class="pending-file-item">
+                                                <div class="pf-icon"><i class="bi bi-file-earmark-pdf"></i></div>
+                                                <div class="pf-info">
+                                                    <span class="pf-name">@doc.OriginalFileName</span>
+                                                    <span class="pf-size">@FormatSize(doc.FileSizeBytes)</span>
+                                                </div>
+                                                <button type="button" class="pf-remove" title="حذف"
+                                                        @onclick="() => RemoveExistingDocument(doc)">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+
+                            <div class="upload-dropzone @(_pendingFiles.Count > 0 ? "has-files" : "") @(_uploadingFile ? "is-uploading" : "")">
+                                <InputFile OnChange="HandleFilesSelected"
+                                           accept=".pdf"
+                                           id="editTxUpload"
+                                           disabled="@_uploadingFile"
+                                           style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:2;font-size:0;" />
+                                <label for="editTxUpload" class="upload-dropzone-inner">
+                                    <div class="upload-icon"><i class="bi bi-cloud-arrow-up"></i></div>
+                                    <div class="upload-title">انقر لاختيار ملف PDF</div>
+                                    <div class="upload-hint">PDF فقط — ملف واحد، حجم الملف حتى 5 ميجا</div>
+                                </label>
+                                @if (_uploadingFile)
+                                {
+                                    <div class="upload-loading-overlay">
+                                        <div class="upload-loading-content">
+                                            <div class="hb-spinner upload-spinner"></div>
+                                            <div class="upload-loading-title">جارٍ قراءة الملف...</div>
+                                            <div class="upload-loading-hint">يرجى الانتظار قليلاً</div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (_pendingFiles.Count > 0)
+                            {
+                                <div class="pending-files-card">
+                                    <div class="pending-files-header">
+                                        <span><i class="bi bi-files"></i> ملفات جديدة (@_pendingFiles.Count)</span>
+                                        <button type="button" class="pending-clear-btn" @onclick="ClearPendingFiles">
+                                            <i class="bi bi-x-circle"></i> مسح الكل
+                                        </button>
+                                    </div>
+                                    <ul class="pending-files-list">
+                                        @for (var i = 0; i < _pendingFiles.Count; i++)
+                                        {
+                                            var idx = i;
+                                            var f = _pendingFiles[idx];
+                                            <li class="pending-file-item">
+                                                <div class="pf-icon"><i class="bi bi-file-earmark-pdf"></i></div>
+                                                <div class="pf-info">
+                                                    <span class="pf-name">@f.Name</span>
+                                                    <span class="pf-size">@FormatSize(f.Size)</span>
+                                                </div>
+                                                <button type="button" class="pf-remove" title="إزالة"
+                                                        @onclick="() => RemovePendingFile(idx)">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
                     </div>
 
-                    <div class="form-actions">
-                        <button type="submit" class="btn-hb-primary" disabled="@_submitting">
+                    <div class="form-actions form-actions-inline">
+                        <a href="/mail/@Id" class="btn-hb-outline btn-sm">
+                            <i class="bi bi-x-lg"></i> إلغاء
+                        </a>
+                        <button type="submit" class="btn-hb-primary btn-sm" disabled="@_submitting">
                             @if (_submitting)
                             {
-                                <span class="hb-spinner" style="width:20px;height:20px;border-width:2px;"></span>
+                                <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span>
                                 <span>جاري الحفظ...</span>
                             }
                             else
@@ -186,9 +368,6 @@
                                 <span>حفظ التغييرات</span>
                             }
                         </button>
-                        <a href="/mail/@Id" class="btn-hb-outline">
-                            <i class="bi bi-x-lg"></i> إلغاء
-                        </a>
                     </div>
                 </EditForm>
             </div>
@@ -205,9 +384,36 @@
     private string? _successMessage, _errorMessage;
     private bool _isAdminMode;
 
+    // Receiver selection
+    private List<Branch> _branches = [];
+    private List<Department> _departments = [];
+    private List<ApplicationUser> _receiverUsers = [];
+    private Guid? _hqBranchId;
+    private bool _isHqSelected;
+    private string? _currentBranchName;
+    private string? _currentDepartmentName;
+
+    // CC
+    private List<ApplicationUser> _ccCandidates = [];
+    private List<Guid> _selectedCcIds = [];
+    private string _ccSearchTerm = "";
+    private bool _ccDropdownOpen;
+
+    // Attachments
+    private bool _uploadingFile;
+    private readonly List<PendingFile> _pendingFiles = new();
+    private List<MailAttachment> _existingDocuments = [];
+    private readonly List<Guid> _documentsToRemove = [];
+    private const int MaxFiles = 1;
+    private const long MaxOriginalBytes = 5L * 1024 * 1024;
+    private const long MaxCompressedBytes = 5L * 1024 * 1024;
+
     protected override async Task OnInitializedAsync()
     {
-        var tx = await DbContext.Mails.FindAsync(Id);
+        var tx = await DbContext.Mails
+            .Include(m => m.CcRecipients)
+            .Include(m => m.Attachments)
+            .FirstOrDefaultAsync(m => m.Id == Id);
 
         if (tx is null)
         {
@@ -216,40 +422,232 @@
         }
 
         var isCreator = tx.CreatedByUserId == CurrentUser.UserId || tx.SenderUserId == CurrentUser.UserId;
-        var isSuperAdmin = CurrentUser.IsInRole("SuperAdmin");
 
-        // قواعد الوصول:
-        // 1) المُنشئ: فقط في حالة Sent
-        // 2) SuperAdmin: أي حالة عدا Archived
-        var allowedAsCreator = isCreator && tx.Status == MailStatus.Sent;
-        var allowedAsAdmin   = isSuperAdmin && tx.Status != MailStatus.Archived;
-
-        if (!allowedAsCreator && !allowedAsAdmin)
+        if (!(isCreator && tx.Status == MailStatus.Sent))
         {
             _loading = false;
             return;
         }
 
-        // وضع المدير يُفعَّل عندما لا يكون المستخدم هو المُنشئ، أو عندما تكون الحالة ليست Sent
-        _isAdminMode = isSuperAdmin && (!isCreator || tx.Status != MailStatus.Sent);
-
+        _isAdminMode = false;
         _transaction = tx;
+
+        // Load form data
         _model.Subject = tx.Subject;
         _model.Description = tx.Description;
         _model.Type = tx.Type;
         _model.Priority = tx.Priority;
         _model.DueDate = tx.DueDate;
         _model.SentAt = AppTime.ToYemen(tx.SentAt);
-        _model.ReceivedAt = AppTime.ToYemen(tx.ReceivedAt);
         _model.SenderNote = tx.SenderNote;
-        _model.ReceiverNote = tx.ReceiverNote;
         _model.RequireReceiverDocument = tx.RequireReceiverDocument;
+
+        // Load branches/departments
+        _branches = await DbContext.Branches.Where(b => b.IsActive).OrderBy(b => b.NameAr).ToListAsync();
+        _hqBranchId = _branches.FirstOrDefault(b => b.BranchType == BranchType.HeadOffice)?.Id;
+        _departments = await DbContext.Departments.Where(d => d.IsActive).OrderBy(d => d.NameAr).ToListAsync();
+
+        if (CurrentUser.BranchId.HasValue)
+            _currentBranchName = _branches.FirstOrDefault(b => b.Id == CurrentUser.BranchId.Value)?.NameAr;
+        if (CurrentUser.DepartmentId.HasValue)
+            _currentDepartmentName = _departments.FirstOrDefault(d => d.Id == CurrentUser.DepartmentId.Value)?.NameAr;
+
+        // Set receiver selection from existing data
+        if (tx.ReceiverBranchId.HasValue)
+        {
+            _model.ReceiverBranchId = tx.ReceiverBranchId.Value.ToString();
+            if (_hqBranchId.HasValue && tx.ReceiverBranchId.Value == _hqBranchId.Value)
+            {
+                _isHqSelected = true;
+                if (tx.ReceiverDepartmentId.HasValue)
+                {
+                    _model.ReceiverDepartmentId = tx.ReceiverDepartmentId.Value.ToString();
+                    _receiverUsers = await UserManager.Users
+                        .Where(u => u.IsActive && u.BranchId == _hqBranchId.Value
+                                    && u.DepartmentId == tx.ReceiverDepartmentId.Value
+                                    && u.Id != CurrentUser.UserId)
+                        .OrderBy(u => u.FullNameAr).ToListAsync();
+                }
+            }
+            else
+            {
+                _receiverUsers = await UserManager.Users
+                    .Where(u => u.IsActive && u.BranchId == tx.ReceiverBranchId.Value
+                                && u.Id != CurrentUser.UserId)
+                    .OrderBy(u => u.FullNameAr).ToListAsync();
+            }
+        }
+
+        if (tx.ReceiverUserId.HasValue)
+            _model.ReceiverUserId = tx.ReceiverUserId.Value.ToString();
+
+        // Load CC
+        _selectedCcIds = tx.CcRecipients.Select(c => c.UserId).ToList();
+        await LoadCcCandidates();
+
+        // Load existing documents
+        _existingDocuments = tx.Attachments.Where(d => !d.IsArchived).ToList();
 
         _loading = false;
     }
 
+    // === Receiver selection ===
+    private async Task OnReceiverBranchChanged()
+    {
+        _model.ReceiverUserId = null;
+        _model.ReceiverDepartmentId = null;
+        _receiverUsers = [];
+        _isHqSelected = false;
+
+        if (string.IsNullOrEmpty(_model.ReceiverBranchId)) return;
+        if (!Guid.TryParse(_model.ReceiverBranchId, out var branchId)) return;
+
+        if (_hqBranchId.HasValue && branchId == _hqBranchId.Value)
+        {
+            _isHqSelected = true;
+            return;
+        }
+
+        _receiverUsers = await UserManager.Users
+            .Where(u => u.IsActive && u.BranchId == branchId && u.Id != CurrentUser.UserId)
+            .OrderBy(u => u.FullNameAr).ToListAsync();
+
+        await LoadCcCandidates();
+    }
+
+    private async Task OnReceiverDepartmentChanged()
+    {
+        _model.ReceiverUserId = null;
+        _receiverUsers = [];
+
+        if (string.IsNullOrEmpty(_model.ReceiverDepartmentId)) return;
+        if (!Guid.TryParse(_model.ReceiverDepartmentId, out var deptId)) return;
+        if (!_hqBranchId.HasValue) return;
+
+        _receiverUsers = await UserManager.Users
+            .Where(u => u.IsActive && u.BranchId == _hqBranchId.Value
+                        && u.DepartmentId == deptId && u.Id != CurrentUser.UserId)
+            .OrderBy(u => u.FullNameAr).ToListAsync();
+
+        await LoadCcCandidates();
+    }
+
+    // === CC ===
+    private async Task LoadCcCandidates()
+    {
+        _ccCandidates = await UserManager.Users
+            .Where(u => u.IsActive && u.Id != CurrentUser.UserId)
+            .OrderBy(u => u.FullNameAr).ToListAsync();
+
+        _selectedCcIds.RemoveAll(id => !_ccCandidates.Any(u => u.Id == id));
+    }
+
+    private void ToggleCcUser(Guid userId)
+    {
+        if (_selectedCcIds.Contains(userId))
+            _selectedCcIds.Remove(userId);
+        else
+            _selectedCcIds.Add(userId);
+    }
+
+    private void RemoveCc(Guid userId) => _selectedCcIds.Remove(userId);
+
+    private IEnumerable<ApplicationUser> GetFilteredCcCandidates()
+    {
+        if (string.IsNullOrWhiteSpace(_ccSearchTerm))
+            return _ccCandidates;
+
+        return _ccCandidates.Where(u =>
+            (u.FullNameAr?.Contains(_ccSearchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (u.JobTitle?.Contains(_ccSearchTerm, StringComparison.OrdinalIgnoreCase) ?? false));
+    }
+
+    // === Attachments ===
+    private async Task HandleFilesSelected(InputFileChangeEventArgs e)
+    {
+        _uploadingFile = true;
+        StateHasChanged();
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(MaxFiles))
+            {
+                if (_pendingFiles.Count >= MaxFiles)
+                {
+                    await Toast.ShowWarningAsync("الحد الأقصى", "يُسمح برفع ملف واحد فقط.");
+                    break;
+                }
+                var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+                if (ext != ".pdf")
+                {
+                    await Toast.ShowWarningAsync("نوع غير مسموح", $"الملف '{file.Name}' غير مدعوم — يُقبل PDF فقط.");
+                    continue;
+                }
+                if (file.Size > MaxOriginalBytes)
+                {
+                    await Toast.ShowWarningAsync("تجاوز الحجم", $"حجم '{file.Name}' أكبر من 5 ميجا.");
+                    continue;
+                }
+                try
+                {
+                    using var ms = new MemoryStream();
+                    await file.OpenReadStream(MaxOriginalBytes).CopyToAsync(ms);
+                    _pendingFiles.Add(new PendingFile
+                    {
+                        Name = file.Name,
+                        ContentType = string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType,
+                        Data = ms.ToArray(),
+                        Size = ms.Length
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error reading file {Name}", file.Name);
+                    await Toast.ShowErrorAsync("خطأ", $"فشل قراءة '{file.Name}'.");
+                }
+            }
+        }
+        finally
+        {
+            _uploadingFile = false;
+            StateHasChanged();
+        }
+    }
+
+    private void RemovePendingFile(int index) { if (index >= 0 && index < _pendingFiles.Count) _pendingFiles.RemoveAt(index); }
+    private void ClearPendingFiles() => _pendingFiles.Clear();
+
+    private void RemoveExistingDocument(MailAttachment doc)
+    {
+        _documentsToRemove.Add(doc.Id);
+        _existingDocuments.Remove(doc);
+    }
+
+    // === Helpers ===
+    private string GetReceiverPlaceholder()
+    {
+        if (string.IsNullOrEmpty(_model.ReceiverBranchId)) return "-- اختر الفرع أولاً --";
+        if (_isHqSelected && string.IsNullOrEmpty(_model.ReceiverDepartmentId)) return "-- اختر الإدارة أولاً --";
+        if (_receiverUsers.Count == 0) return "-- لا يوجد موظفون --";
+        return "-- اختر المستلِم --";
+    }
+
+    private string GetReceiverHelp()
+    {
+        if (_isHqSelected) return "موظفو الإدارة المختارة في الإدارة العامة";
+        if (!string.IsNullOrEmpty(_model.ReceiverBranchId)) return "";
+        return "اختر الفرع المستلِم لعرض الموظفين";
+    }
+
     private async Task GoBack() => await JS.InvokeVoidAsync("history.back");
 
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:N1} KB",
+        _ => $"{bytes / (1024.0 * 1024.0):N2} MB"
+    };
+
+    // === Submit ===
     private async Task HandleSubmit()
     {
         if (_transaction is null) return;
@@ -265,47 +663,46 @@
                 return;
             }
 
-            if (_isAdminMode && string.IsNullOrWhiteSpace(_model.AdminEditReason))
+            if (string.IsNullOrEmpty(_model.ReceiverUserId) || !Guid.TryParse(_model.ReceiverUserId, out var receiverUserId))
             {
-                _errorMessage = "يرجى إدخال سبب التعديل الإداري";
+                _errorMessage = "يرجى اختيار المستلِم";
                 return;
             }
+
+            if (string.IsNullOrEmpty(_model.ReceiverBranchId) || !Guid.TryParse(_model.ReceiverBranchId, out var receiverBranchId))
+            {
+                _errorMessage = "يرجى اختيار الفرع المستلِم";
+                return;
+            }
+
+            Guid? receiverDepartmentId = null;
+            if (!string.IsNullOrEmpty(_model.ReceiverDepartmentId) && Guid.TryParse(_model.ReceiverDepartmentId, out var deptId))
+                receiverDepartmentId = deptId;
 
             var sentAtUtc = AppTime.FromYemenToUtc(_model.SentAt);
 
-            DateTime? receivedAtUtc = null;
-            if (_model.ReceivedAt.HasValue)
-            {
-                receivedAtUtc = AppTime.FromYemenToUtc(_model.ReceivedAt.Value);
-                if (receivedAtUtc < sentAtUtc)
-                {
-                    _errorMessage = "تاريخ الاستلام لا يمكن أن يكون قبل تاريخ الإرسال";
-                    return;
-                }
-            }
-
-            var fresh = await DbContext.Mails.FindAsync(Id);
+            var fresh = await DbContext.Mails
+                .Include(m => m.CcRecipients)
+                .Include(m => m.Attachments)
+                .FirstOrDefaultAsync(m => m.Id == Id);
             if (fresh is null)
             {
-                _errorMessage = "البريد غير موجودة";
+                _errorMessage = "البريد غير موجود";
                 return;
             }
 
-            if (fresh.Status == MailStatus.Archived)
-            {
-                _errorMessage = "لا يمكن تعديل بريد مؤرشفة";
-                return;
-            }
-
-            // تأكد من بقاء الصلاحية بعد إعادة التحميل
             var isCreator = fresh.CreatedByUserId == CurrentUser.UserId || fresh.SenderUserId == CurrentUser.UserId;
-            var isSuperAdmin = CurrentUser.IsInRole("SuperAdmin");
-            if (!isSuperAdmin && !(isCreator && fresh.Status == MailStatus.Sent))
+            if (!(isCreator && fresh.Status == MailStatus.Sent))
             {
                 _errorMessage = "ليس لديك صلاحية تعديل هذا البريد";
                 return;
             }
 
+            // Capture old recipients before update
+            var oldReceiverUserId = fresh.ReceiverUserId;
+            var oldCcIds = fresh.CcRecipients.Select(c => c.UserId).ToHashSet();
+
+            // Update basic fields
             fresh.Subject = _model.Subject.Trim();
             fresh.Description = string.IsNullOrWhiteSpace(_model.Description) ? null : _model.Description.Trim();
             fresh.Type = _model.Type;
@@ -316,36 +713,131 @@
             fresh.RequireReceiverDocument = _model.RequireReceiverDocument;
             fresh.UpdatedAt = DateTime.UtcNow;
 
-            if (_isAdminMode)
+            // Update receiver
+            fresh.ReceiverBranchId = receiverBranchId;
+            fresh.ReceiverDepartmentId = receiverDepartmentId;
+            fresh.ReceiverUserId = receiverUserId;
+
+            // Update CC
+            fresh.CcRecipients.Clear();
+            foreach (var ccId in _selectedCcIds)
             {
-                fresh.ReceiverNote = string.IsNullOrWhiteSpace(_model.ReceiverNote) ? null : _model.ReceiverNote.Trim();
-                if (receivedAtUtc.HasValue && fresh.ReceivedAt.HasValue)
-                {
-                    fresh.ReceivedAt = receivedAtUtc;
-                    if (fresh.Status == MailStatus.Received)
-                        fresh.CompletedAt = receivedAtUtc;
-                }
-
-                fresh.AdminEditedAt = DateTime.UtcNow;
-                fresh.AdminEditedByUserId = CurrentUser.UserId;
-                fresh.AdminEditedByName = CurrentUser.FullName ?? CurrentUser.UserName;
-
-                fresh.History.Add(new MailHistory
+                fresh.CcRecipients.Add(new MailCC
                 {
                     MailId = fresh.Id,
-                    FromStatus = fresh.Status,
-                    ToStatus = fresh.Status,
-                    Action = "تعديل إداري من قبل مدير النظام",
-                    Notes = _model.AdminEditReason!.Trim(),
-                    PerformedByUserId = CurrentUser.UserId,
-                    PerformedAt = DateTime.UtcNow
+                    UserId = ccId,
+                    AddedAt = DateTime.UtcNow
                 });
             }
 
+            // Remove deleted documents
+            foreach (var docId in _documentsToRemove)
+            {
+                var doc = fresh.Attachments.FirstOrDefault(d => d.Id == docId);
+                if (doc != null)
+                {
+                    doc.IsArchived = true;
+                    doc.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
             await DbContext.SaveChangesAsync();
-            _successMessage = _isAdminMode
-                ? "تم حفظ التعديل الإداري بنجاح"
-                : "تم تحديث البريد بنجاح";
+
+            // === Handle notifications for recipient changes ===
+            var newCcIds = _selectedCcIds.ToHashSet();
+
+            // Determine removed and added users
+            var removedUsers = new HashSet<Guid>();
+            var addedUsers = new HashSet<Guid>();
+
+            // Receiver changed
+            if (oldReceiverUserId.HasValue && oldReceiverUserId.Value != receiverUserId)
+                removedUsers.Add(oldReceiverUserId.Value);
+            if (!oldReceiverUserId.HasValue || oldReceiverUserId.Value != receiverUserId)
+                addedUsers.Add(receiverUserId);
+
+            // CC changes
+            foreach (var removed in oldCcIds.Except(newCcIds))
+                removedUsers.Add(removed);
+            foreach (var added in newCcIds.Except(oldCcIds))
+                addedUsers.Add(added);
+
+            // Don't notify sender
+            removedUsers.Remove(CurrentUser.UserId);
+            addedUsers.Remove(CurrentUser.UserId);
+
+            // Delete old notifications for removed users
+            if (removedUsers.Count > 0)
+            {
+                var oldNotifications = await DbContext.Notifications
+                    .Where(n => n.MailId == fresh.Id && removedUsers.Contains(n.UserId))
+                    .ToListAsync();
+                DbContext.Notifications.RemoveRange(oldNotifications);
+                await DbContext.SaveChangesAsync();
+            }
+
+            // Send notifications to new users
+            if (addedUsers.Count > 0)
+            {
+                var senderName = CurrentUser.FullName ?? CurrentUser.UserName;
+                var senderDept = _currentDepartmentName ?? _currentBranchName ?? "الإدارة";
+                var title = $"بريد وارد — {fresh.ReferenceNumber}";
+                var message = $"بريد من {senderDept} — {senderName} بعنوان: {fresh.Subject}";
+
+                foreach (var userId in addedUsers)
+                {
+                    await NotificationService.NotifyUserAsync(
+                        userId, title, message, fresh.Id, NotificationType.MailStatusChanged);
+                }
+            }
+
+            // Upload new attachments
+            foreach (var pf in _pendingFiles)
+            {
+                try
+                {
+                    using var ms = new MemoryStream(pf.Data);
+                    var compression = await PdfCompression.CompressAsync(ms);
+
+                    if (compression.CompressedSizeBytes > MaxCompressedBytes)
+                    {
+                        compression.OutputStream.Dispose();
+                        continue;
+                    }
+
+                    await using var uploadStream = compression.OutputStream;
+                    uploadStream.Position = 0;
+                    var uploadResult = await FileStorage.UploadAsync(uploadStream, pf.Name, pf.ContentType);
+
+                    var mailDoc = new MailAttachment
+                    {
+                        Id = Guid.NewGuid(),
+                        MailId = fresh.Id,
+                        OriginalFileName = pf.Name,
+                        StoragePath = uploadResult.StoragePath,
+                        FileSizeBytes = uploadResult.FileSizeBytes,
+                        Checksum = uploadResult.Checksum,
+                        ContentType = pf.ContentType,
+                        AttachmentType = AttachmentType.Attachment,
+                        Version = 1,
+                        UploadedByUserId = CurrentUser.UserId,
+                        UploadedAt = DateTime.UtcNow
+                    };
+                    DbContext.MailAttachments.Add(mailDoc);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Upload failed for file {Name}", pf.Name);
+                }
+            }
+
+            if (_pendingFiles.Count > 0)
+                await DbContext.SaveChangesAsync();
+
+            await Toast.ShowSuccessAsync("تم التحديث", "تم تحديث البريد بنجاح");
+            _pendingFiles.Clear();
+            Navigation.NavigateTo($"/mail/{Id}");
+            return;
         }
         catch (Exception ex)
         {
@@ -381,12 +873,20 @@
         public string? Description { get; set; }
         public MailType Type { get; set; }
         public MailPriority Priority { get; set; }
+        public string? ReceiverBranchId { get; set; }
+        public string? ReceiverDepartmentId { get; set; }
+        public string? ReceiverUserId { get; set; }
         public DateTime? DueDate { get; set; }
         public DateTime SentAt { get; set; } = AppTime.YemenNow;
-        public DateTime? ReceivedAt { get; set; }
         public string? SenderNote { get; set; }
-        public string? ReceiverNote { get; set; }
-        public string? AdminEditReason { get; set; }
         public bool RequireReceiverDocument { get; set; }
+    }
+
+    private class PendingFile
+    {
+        public string Name { get; set; } = "";
+        public string ContentType { get; set; } = "";
+        public byte[] Data { get; set; } = [];
+        public long Size { get; set; }
     }
 }

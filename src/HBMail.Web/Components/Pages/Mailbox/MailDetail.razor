@@ -40,9 +40,9 @@
     {
         var tx = _transaction;
         var isSuperAdmin = CurrentUser.IsInRole("SuperAdmin");
-        var isOwnerEditable = tx.Status == MailStatus.Sent && (tx.CreatedByUserId == CurrentUser.UserId || tx.SenderUserId == CurrentUser.UserId);
-        var canAdminEdit = isSuperAdmin && tx.Status != MailStatus.Archived;
-        var canEdit = isOwnerEditable || canAdminEdit;
+        var isSender = tx.CreatedByUserId == CurrentUser.UserId || tx.SenderUserId == CurrentUser.UserId;
+        var isOwnerEditable = tx.Status == MailStatus.Sent && isSender;
+        var canEdit = isOwnerEditable;
 
         <!-- Page Header -->
         <div class="page-title-section">
@@ -59,7 +59,7 @@
                     {
                         <a href="/mail/edit/@tx.Id" class="btn-hb-outline">
                             <i class="bi bi-pencil-square"></i>
-                            @(canAdminEdit && !isOwnerEditable ? "تعديل إداري" : "تعديل")
+                            تعديل
                         </a>
                     }
                     <a href="/mail" class="btn-hb-outline"><i class="bi bi-arrow-right"></i> العودة</a>
@@ -103,7 +103,7 @@
             </div>
         }
 
-        <!-- Workflow Progress (مُرسَلة ──► موجه لموظف ──► مُستلَمة) -->
+        <!-- Workflow Progress -->
         <div class="workflow-progress simple-flow">
             @{
                 var isInTransit = tx.Status == MailStatus.AssignedToStaff;
@@ -111,64 +111,97 @@
                 var isReturned = tx.Status == MailStatus.Rejected;
                 var isTerminalAlt = isReturned;
 
-                // خط 1: Sent → AssignedToStaff
-                var line1State = (isInTransit || isReceived) ? "line-completed" : (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected) ? "line-terminal" : "line-pending");
-                // خط 2: AssignedToStaff → Received
-                var line2State = isReceived ? "line-completed" : (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.AssignedToStaff) ? "line-terminal" : "line-pending");
+                // هل مرّ البريد فعلاً بمرحلة التوجيه لموظف؟
+                var wasAssigned = tx.AssignedAt.HasValue
+                    || tx.History.Any(h => h.ToStatus == MailStatus.AssignedToStaff);
             }
 
-            <!-- خطوة 1: مُرسَلة -->
-            <div class="workflow-step step-completed">
-                <div class="step-dot"><i class="bi bi-send-fill"></i></div>
-                <span class="step-label">تم الإرسال</span>
-                <span class="step-date"><i class="bi bi-clock"></i> @AppTime.FormatYemen(tx.SentAt)</span>
-                <div class="step-line @line1State"></div>
-            </div>
-
-            <!-- خطوة 2: تم التوجيه لموظف -->
-            @{
-                bool step2Done = isInTransit || isReceived;
-                bool step2Terminal = isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected);
-                string step2Class = step2Done ? "step-completed" : (step2Terminal ? "step-terminal" : (tx.Status == MailStatus.Sent ? "step-current" : "step-pending"));
-                string step2Icon = step2Done ? "bi-person-check" : (step2Terminal ? "bi-x-octagon-fill" : "bi-hourglass-split");
-                string step2Text = step2Done ? "تم التوجيه لموظف" : (step2Terminal ? "مرفوض" : "بانتظار المستلم");
-                string? step2Date = (step2Done && tx.AssignedAt.HasValue) ? AppTime.FormatYemen(tx.AssignedAt.Value) : (step2Terminal && tx.CompletedAt.HasValue) ? AppTime.FormatYemen(tx.CompletedAt.Value) : null;
-            }
-            <div class="workflow-step @step2Class">
-                <div class="step-dot"><i class="bi @step2Icon"></i></div>
-                <span class="step-label">@step2Text</span>
-                @if (!string.IsNullOrEmpty(step2Date))
-                {
-                    <span class="step-date"><i class="bi bi-clock"></i> @step2Date</span>
-                }
-                else if (!step2Terminal)
-                {
-                    <span class="step-date step-date-pending"><i class="bi bi-three-dots"></i> بانتظار الإجراء</span>
-                }
-                @if (step2Done || isInTransit)
-                {
-                    <div class="step-line @line2State"></div>
-                }
-            </div>
-
-            <!-- خطوة 3: مُستلَمة (إذا وصلت لمرحلة AssignedToStaff على الأقل أو Rejected من المستلم) -->
-            @if (step2Done || (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.AssignedToStaff)))
+            @if (wasAssigned)
             {
-                bool step3Terminal = isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.AssignedToStaff && h.ToStatus == MailStatus.Rejected);
-                string step3Class = isReceived ? "step-completed" : (step3Terminal ? "step-terminal" : "step-current");
-                string step3Icon = isReceived ? "bi-check-lg" : (step3Terminal ? "bi-x-octagon-fill" : "bi-hourglass-split");
-                string step3Text = isReceived ? "تم الاستلام" : (step3Terminal ? "مرفوضة (المستلم)" : "بانتظار المستلم");
-                string? step3Date = (isReceived && tx.ReceivedAt.HasValue) ? AppTime.FormatYemen(tx.ReceivedAt.Value)
-                    : (step3Terminal && tx.CompletedAt.HasValue) ? AppTime.FormatYemen(tx.CompletedAt.Value) : null;
+                // === مسار 3 خطوات: إرسال → توجيه لموظف → استلام ===
+                var line1State = (isInTransit || isReceived) ? "line-completed" : (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected) ? "line-terminal" : "line-pending");
+                var line2State = isReceived ? "line-completed" : (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.AssignedToStaff) ? "line-terminal" : "line-pending");
 
-                <div class="workflow-step @step3Class">
-                    <div class="step-dot"><i class="bi @step3Icon"></i></div>
-                    <span class="step-label">@step3Text</span>
-                    @if (!string.IsNullOrEmpty(step3Date))
+                <!-- خطوة 1: مُرسَلة -->
+                <div class="workflow-step step-completed">
+                    <div class="step-dot"><i class="bi bi-send-fill"></i></div>
+                    <span class="step-label">تم الإرسال</span>
+                    <span class="step-date"><i class="bi bi-clock"></i> @AppTime.FormatYemen(tx.SentAt)</span>
+                    <div class="step-line @line1State"></div>
+                </div>
+
+                <!-- خطوة 2: تم التوجيه لموظف -->
+                <div class="workflow-step @(isInTransit || isReceived ? "step-completed" : (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected) ? "step-terminal" : (tx.Status == MailStatus.Sent ? "step-current" : "step-pending")))">
+                    <div class="step-dot"><i class="bi @(isInTransit || isReceived ? "bi-person-check" : (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected) ? "bi-x-octagon-fill" : "bi-hourglass-split"))"></i></div>
+                    <span class="step-label">@(isInTransit || isReceived ? "تم التوجيه لموظف" : (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected) ? "مرفوض" : "بانتظار التوجيه"))</span>
+                    @if (tx.AssignedAt.HasValue && (isInTransit || isReceived))
                     {
-                        <span class="step-date"><i class="bi bi-clock"></i> @step3Date</span>
+                        <span class="step-date"><i class="bi bi-clock"></i> @AppTime.FormatYemen(tx.AssignedAt.Value)</span>
                     }
-                    else
+                    else if (isTerminalAlt && tx.CompletedAt.HasValue && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected))
+                    {
+                        <span class="step-date"><i class="bi bi-clock"></i> @AppTime.FormatYemen(tx.CompletedAt.Value)</span>
+                    }
+                    else if (!(isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected)))
+                    {
+                        <span class="step-date step-date-pending"><i class="bi bi-three-dots"></i> بانتظار الإجراء</span>
+                    }
+                    @if (isInTransit || isReceived)
+                    {
+                        <div class="step-line @line2State"></div>
+                    }
+                </div>
+
+                <!-- خطوة 3: مُستلَمة -->
+                @if ((isInTransit || isReceived) || (isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.AssignedToStaff)))
+                {
+                    bool step3Terminal = isTerminalAlt && tx.History.Any(h => h.FromStatus == MailStatus.AssignedToStaff && h.ToStatus == MailStatus.Rejected);
+                    string step3Class = isReceived ? "step-completed" : (step3Terminal ? "step-terminal" : "step-current");
+                    string step3Icon = isReceived ? "bi-check-lg" : (step3Terminal ? "bi-x-octagon-fill" : "bi-hourglass-split");
+                    string step3Text = isReceived ? "تم الاستلام" : (step3Terminal ? "مرفوضة (المستلم)" : "بانتظار المستلم");
+                    string? step3Date = (isReceived && tx.ReceivedAt.HasValue) ? AppTime.FormatYemen(tx.ReceivedAt.Value)
+                        : (step3Terminal && tx.CompletedAt.HasValue) ? AppTime.FormatYemen(tx.CompletedAt.Value) : null;
+
+                    <div class="workflow-step @step3Class">
+                        <div class="step-dot"><i class="bi @step3Icon"></i></div>
+                        <span class="step-label">@step3Text</span>
+                        @if (!string.IsNullOrEmpty(step3Date))
+                        {
+                            <span class="step-date"><i class="bi bi-clock"></i> @step3Date</span>
+                        }
+                        else
+                        {
+                            <span class="step-date step-date-pending"><i class="bi bi-three-dots"></i> بانتظار الإجراء</span>
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                // === مسار 2 خطوات: إرسال → استلام (مباشر) ===
+                var directLineState = isReceived ? "line-completed" : (isTerminalAlt ? "line-terminal" : "line-pending");
+
+                <!-- خطوة 1: مُرسَلة -->
+                <div class="workflow-step step-completed">
+                    <div class="step-dot"><i class="bi bi-send-fill"></i></div>
+                    <span class="step-label">تم الإرسال</span>
+                    <span class="step-date"><i class="bi bi-clock"></i> @AppTime.FormatYemen(tx.SentAt)</span>
+                    <div class="step-line @directLineState"></div>
+                </div>
+
+                <!-- خطوة 2: مُستلَمة -->
+                <div class="workflow-step @(isReceived ? "step-completed" : (isTerminalAlt ? "step-terminal" : "step-current"))">
+                    <div class="step-dot"><i class="bi @(isReceived ? "bi-check-lg" : (isTerminalAlt ? "bi-x-octagon-fill" : "bi-hourglass-split"))"></i></div>
+                    <span class="step-label">@(isReceived ? "تم الاستلام" : (isTerminalAlt ? "مرفوض" : "بانتظار الاستلام"))</span>
+                    @if (isReceived && tx.ReceivedAt.HasValue)
+                    {
+                        <span class="step-date"><i class="bi bi-clock"></i> @AppTime.FormatYemen(tx.ReceivedAt.Value)</span>
+                    }
+                    else if (isTerminalAlt && tx.CompletedAt.HasValue)
+                    {
+                        <span class="step-date"><i class="bi bi-clock"></i> @AppTime.FormatYemen(tx.CompletedAt.Value)</span>
+                    }
+                    else if (!isTerminalAlt)
                     {
                         <span class="step-date step-date-pending"><i class="bi bi-three-dots"></i> بانتظار الإجراء</span>
                     }
@@ -293,7 +326,7 @@
         @if (tx.Status == MailStatus.Rejected)
         {
             var rejectedFromSent = tx.History.Any(h => h.FromStatus == MailStatus.Sent && h.ToStatus == MailStatus.Rejected);
-            var rejectorLabel = rejectedFromSent ? "الشؤون الإدارية" : "المستلم";
+            var rejectorLabel = rejectedFromSent ? "المرسل" : "المستلم";
             <div class="hb-alert hb-alert-danger rejection-notice">
                 <div class="rejection-header">
                     <i class="bi bi-x-octagon-fill"></i>
@@ -527,91 +560,176 @@
             var canArchive = _allowedTransitions.Contains(MailStatus.Archived);
             var canDelete  = MailStateMachine.CanDelete(tx, CurrentUser.UserId);
 
-            @* === عرض المستلم: استلام / توجيه / رفض === *@
+            @* === عرض المستلم: توجيه / استلام / رفض === *@
             @if (canReceive || canReject || canAssign)
             {
                 <div class="hb-card action-card action-card-receiver">
                     <h3 class="card-section-title"><i class="bi bi-lightning-fill"></i> الإجراءات المتاحة</h3>
                     <p class="action-role-hint">
                         <i class="bi bi-person-check"></i>
-                        أنت <strong>المستلم</strong> لهذا البريد. اختر:
-                        <strong>تأكيد الاستلام</strong> للقبول،
-                        @if (canAssign) { <text><strong>توجيه لموظف</strong>،</text> }
-                        أو <strong>رفض</strong> مع توضيح السبب.
+                        أنت <strong>المستلم</strong> لهذا البريد.
+                        @if (canAssign) { <text>يمكنك <strong>توجيهه لموظف</strong> أو </text> }
+                        اختر <strong>تأكيد الاستلام</strong> للقبول أو <strong>رفض</strong> مع توضيح السبب.
                     </p>
 
-                    @if (canReceive)
-                    {
-                        <div class="action-receipt-stack">
-                            <div class="action-receipt-time">
-                                <label class="hb-form-label">
-                                    <i class="bi bi-clock-history"></i> وقت الاستلام <span class="required-star">*</span>
-                                </label>
-                                <input type="datetime-local" class="hb-form-control"
-                                       value="@_actualReceivedAt.ToString("yyyy-MM-ddTHH:mm")"
-                                       @onchange="OnReceivedAtChanged" />
-                            </div>
-
-                            <div class="action-note-input">
-                                <label class="hb-form-label">ملاحظة (اختياري)</label>
-                                <textarea class="hb-form-control note-textarea" rows="3" maxlength="1000"
-                                          placeholder="أي ملاحظة عند الاستلام..."
-                                          @bind="_receiverNote"></textarea>
-                            </div>
-                        </div>
-
-                        <div class="workflow-actions">
-                            <button class="workflow-btn workflow-btn-success"
-                                    @onclick="ConfirmReceive" disabled="@_processing">
-                                @if (_processing) { <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span> }
-                                else { <i class="bi bi-check2-all"></i> }
-                                تأكيد الاستلام
-                            </button>
-                        </div>
-                    }
-
+                    @* ── خيار 1: توجيه لموظف ── *@
                     @if (canAssign)
                     {
-                        <hr class="action-separator" />
-                        <div class="action-receipt-stack">
-                            <div class="action-note-input">
-                                <label class="hb-form-label"><i class="bi bi-person-plus"></i> توجيه لموظف</label>
-                                <select class="hb-form-control" @bind="_assignToStaffUserId">
-                                    <option value="">— اختر موظفاً —</option>
-                                    @if (_departmentStaff != null)
-                                    {
-                                        @foreach (var staff in _departmentStaff)
+                        <div class="action-option-card action-option-forward">
+                            <div class="action-option-header">
+                                <div class="action-option-icon icon-forward">
+                                    <i class="bi bi-person-plus-fill"></i>
+                                </div>
+                                <div class="action-option-title-group">
+                                    <h4>توجيه لموظف</h4>
+                                    <p>تفويض البريد لأحد موظفي القسم للمتابعة</p>
+                                </div>
+                            </div>
+                            <div class="action-option-body">
+                                <div class="action-field">
+                                    <label class="hb-form-label"><i class="bi bi-person-badge"></i> اختر الموظف <span class="required-star">*</span></label>
+                                    <select class="hb-form-control" @bind="_assignToStaffUserId">
+                                        <option value="">— اختر موظفاً —</option>
+                                        @if (_departmentStaff != null)
                                         {
-                                            <option value="@staff.Id">@staff.FullNameAr</option>
+                                            @foreach (var staff in _departmentStaff)
+                                            {
+                                                <option value="@staff.Id">@staff.FullNameAr</option>
+                                            }
                                         }
-                                    }
-                                </select>
+                                    </select>
+                                </div>
+                                <div class="action-field">
+                                    <label class="hb-form-label"><i class="bi bi-chat-left-text"></i> ملاحظة التوجيه <span class="optional-hint">(اختياري)</span></label>
+                                    <textarea class="hb-form-control note-textarea" rows="2" maxlength="1000"
+                                              placeholder="تعليمات أو ملاحظات للموظف..."
+                                              @bind="_assignNote"></textarea>
+                                </div>
                             </div>
-                            <div class="action-note-input">
-                                <label class="hb-form-label">ملاحظة التوجيه (اختياري)</label>
-                                <textarea class="hb-form-control note-textarea" rows="2" maxlength="1000"
-                                          placeholder="تعليمات للموظف..."
-                                          @bind="_assignNote"></textarea>
+                            <div class="action-option-footer">
+                                <button class="workflow-btn workflow-btn-primary"
+                                        @onclick="ConfirmAssignToStaff" disabled="@_processing">
+                                    @if (_processing) { <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span> }
+                                    else { <i class="bi bi-send-fill"></i> }
+                                    توجيه للموظف
+                                </button>
                             </div>
-                        </div>
-                        <div class="workflow-actions">
-                            <button class="workflow-btn workflow-btn-primary"
-                                    @onclick="ConfirmAssignToStaff" disabled="@_processing">
-                                @if (_processing) { <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span> }
-                                else { <i class="bi bi-person-check"></i> }
-                                توجيه للموظف
-                            </button>
                         </div>
                     }
 
-                    @if (canReject)
+                    @* ── فاصل "أو" ── *@
+                    @if (canAssign && (canReceive || canReject))
                     {
-                        <hr class="action-separator" />
-                        <div class="workflow-actions">
-                            <button class="workflow-btn workflow-btn-warning"
-                                    @onclick="OpenRejectDialog" disabled="@_processing">
-                                <i class="bi bi-x-octagon"></i> رفض البريد
-                            </button>
+                        <div class="action-or-divider">
+                            <span>أو</span>
+                        </div>
+                    }
+
+                    @* ── خيار 2: تأكيد الاستلام ── *@
+                    @if (canReceive)
+                    {
+                        <div class="action-option-card action-option-receive">
+                            <div class="action-option-header">
+                                <div class="action-option-icon icon-receive">
+                                    <i class="bi bi-check2-circle"></i>
+                                </div>
+                                <div class="action-option-title-group">
+                                    <h4>تأكيد الاستلام</h4>
+                                    <p>استلام البريد شخصياً والبدء بالمعالجة</p>
+                                </div>
+                            </div>
+                            <div class="action-option-body">
+                                <div class="action-field">
+                                    <label class="hb-form-label">
+                                        <i class="bi bi-clock-history"></i> وقت الاستلام <span class="required-star">*</span>
+                                    </label>
+                                    <input type="datetime-local" class="hb-form-control datetime-input"
+                                           value="@_actualReceivedAt.ToString("yyyy-MM-ddTHH:mm")"
+                                           @onchange="OnReceivedAtChanged" />
+                                </div>
+
+                                <div class="action-field">
+                                    <label class="hb-form-label">
+                                        <i class="bi bi-file-earmark-arrow-up"></i>
+                                        رفع مستند
+                                        @if (_transaction!.RequireReceiverDocument)
+                                        {
+                                            <span class="required-star">* (إجباري)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="optional-hint">(اختياري)</span>
+                                        }
+                                    </label>
+                                    <div class="receiver-upload-area @(_pendingReceiverFiles.Any() ? "has-file" : "")">
+                                        @if (!_pendingReceiverFiles.Any())
+                                        {
+                                            <div class="upload-icon-wrapper">
+                                                <i class="bi bi-cloud-arrow-up"></i>
+                                            </div>
+                                            <p class="upload-label">اختر ملف PDF أو اسحبه هنا</p>
+                                            <p class="upload-hint">PDF فقط — حد أقصى 5 ميجا</p>
+                                            <InputFile OnChange="HandleReceiverFilesSelected" accept=".pdf"
+                                                       style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:2;" />
+                                        }
+                                        else
+                                        {
+                                            @foreach (var pf in _pendingReceiverFiles)
+                                            {
+                                                <div class="uploaded-file-card">
+                                                    <div class="uploaded-file-icon">
+                                                        <i class="bi bi-file-earmark-pdf-fill"></i>
+                                                    </div>
+                                                    <div class="uploaded-file-info">
+                                                        <span class="uploaded-file-name">@pf.Name</span>
+                                                        <span class="uploaded-file-size">@((pf.Size / 1024.0).ToString("N0")) KB</span>
+                                                    </div>
+                                                    <button type="button" class="uploaded-file-remove" @onclick="() => _pendingReceiverFiles.Remove(pf)">
+                                                        <i class="bi bi-trash3"></i>
+                                                    </button>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="action-field">
+                                    <label class="hb-form-label"><i class="bi bi-chat-left-text"></i> ملاحظة <span class="optional-hint">(اختياري)</span></label>
+                                    <textarea class="hb-form-control note-textarea" rows="2" maxlength="1000"
+                                              placeholder="أي ملاحظة عند الاستلام..."
+                                              @bind="_receiverNote"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="action-option-footer">
+                                <button class="workflow-btn workflow-btn-success"
+                                        @onclick="ConfirmReceive" disabled="@_processing">
+                                    @if (_processing) { <span class="hb-spinner" style="width:16px;height:16px;border-width:2px;"></span> }
+                                    else { <i class="bi bi-check2-all"></i> }
+                                    تأكيد الاستلام
+                                </button>
+
+                                @if (canReject)
+                                {
+                                    <button class="workflow-btn workflow-btn-warning"
+                                            @onclick="OpenRejectDialog" disabled="@_processing">
+                                        <i class="bi bi-x-octagon"></i> رفض البريد
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @* ── رفض فقط (بدون استلام) ── *@
+                    @if (canReject && !canReceive)
+                    {
+                        <div class="action-option-card action-option-reject">
+                            <div class="action-option-footer">
+                                <button class="workflow-btn workflow-btn-warning"
+                                        @onclick="OpenRejectDialog" disabled="@_processing">
+                                    <i class="bi bi-x-octagon"></i> رفض البريد
+                                </button>
+                            </div>
                         </div>
                     }
                 </div>
@@ -624,9 +742,9 @@
                     <div class="scc-content">
                         <div class="scc-icon"><i class="bi bi-hourglass-split"></i></div>
                         <div class="scc-text">
-                            <h4>البريد بانتظار استلام الشؤون الإدارية</h4>
-                            <p>بصفتك <strong>المرسل</strong>، يمكنك سحب البريد وإلغاءها ما دامت لم تُستلم من الشؤون الإدارية بعد.
-                               الإلغاء يحذف البريد ومرفقاتها وإشعاراتها <strong>نهائياً</strong>.</p>
+                            <h4>البريد بانتظار استلام المستلِم</h4>
+                            <p>بصفتك <strong>المرسل (الشؤون الإدارية)</strong>، يمكنك سحب البريد وإلغاءه ما دام لم يُستلم من المستلِم بعد.
+                               الإلغاء يحذف البريد ومرفقاته وإشعاراته <strong>نهائياً</strong>.</p>
                         </div>
                         <button class="btn-hb-outline-danger scc-btn"
                                 @onclick="OpenCancelDialog" disabled="@_processing">
@@ -693,7 +811,7 @@
 
     private readonly List<PendingFile> _pendingReceiverFiles = new();
     private const int MaxReceiverFiles = 1;
-    private const long MaxReceiverOriginalBytes = 20L * 1024 * 1024;
+    private const long MaxReceiverOriginalBytes = 5L * 1024 * 1024;
     private const long MaxReceiverCompressedBytes = 5L * 1024 * 1024;
 
     private long ReceiverPendingTotalBytes => _pendingReceiverFiles.Sum(f => f.Size);
@@ -719,7 +837,7 @@
                 }
                 if (file.Size > MaxReceiverOriginalBytes)
                 {
-                    await Toast.ShowWarningAsync("تجاوز الحجم", $"حجم '{file.Name}' أكبر من 20 ميجا. يجب تصغيره قبل الرفع.");
+                    await Toast.ShowWarningAsync("تجاوز الحجم", $"حجم '{file.Name}' أكبر من 5 ميجا. يجب تصغيره قبل الرفع.");
                     continue;
                 }
                 try
@@ -882,12 +1000,24 @@
         }
 
         // Load department staff for assign-to-staff dropdown
-        if (MailStateMachine.IsManager(CurrentUser.Roles) && CurrentUser.DepartmentId.HasValue)
+        if (MailStateMachine.IsManager(CurrentUser.Roles))
         {
-            _departmentStaff = await UserManager.Users
-                .Where(u => u.DepartmentId == CurrentUser.DepartmentId && u.Id != CurrentUser.UserId && u.IsActive)
-                .OrderBy(u => u.FullNameAr)
-                .ToListAsync();
+            if (CurrentUser.DepartmentId.HasValue)
+            {
+                // Manager has a department → show staff from same department
+                _departmentStaff = await UserManager.Users
+                    .Where(u => u.DepartmentId == CurrentUser.DepartmentId && u.Id != CurrentUser.UserId && u.IsActive)
+                    .OrderBy(u => u.FullNameAr)
+                    .ToListAsync();
+            }
+            else if (CurrentUser.BranchId.HasValue)
+            {
+                // Branch manager without department → show staff from same branch
+                _departmentStaff = await UserManager.Users
+                    .Where(u => u.BranchId == CurrentUser.BranchId && u.Id != CurrentUser.UserId && u.IsActive)
+                    .OrderBy(u => u.FullNameAr)
+                    .ToListAsync();
+            }
         }
 
         // Load CC info
@@ -1359,7 +1489,7 @@
 
     private static string GetStatusLabel(MailStatus s) => s switch
     {
-        MailStatus.Sent      => "بانتظار الشؤون الإدارية",
+        MailStatus.Sent      => "بانتظار الاستلام",
         MailStatus.AssignedToStaff => "موجه لموظف",
         MailStatus.Received  => "تم الاستلام",
         MailStatus.Rejected  => "مرفوضة",

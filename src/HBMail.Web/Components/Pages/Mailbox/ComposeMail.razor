@@ -741,7 +741,9 @@
             try
             {
                 var title = $"بريد جديد وارد — {Mail.ReferenceNumber}";
-                var message = $"بريد جديد من {_currentBranchName ?? "الإدارة"} بعنوان: {Mail.Subject}";
+                var senderDept = _currentDepartmentName ?? _currentBranchName ?? "الإدارة";
+                var senderName = CurrentUser.FullName ?? CurrentUser.UserName;
+                var message = $"بريد جديد من {senderDept} — {senderName} بعنوان: {Mail.Subject}";
 
                 // إشعار المستلم
                 if (receiverUserId != CurrentUser.UserId)
