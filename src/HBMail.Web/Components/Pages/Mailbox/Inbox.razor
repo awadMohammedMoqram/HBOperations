@@ -24,9 +24,12 @@
                 <h1 class="section-title"><i class="bi bi-file-earmark-text"></i> صندوق البريد</h1>
                 <p class="section-subtitle">عرض وإدارة جميع البريد الواردة والصادرة</p>
             </div>
-            <a href="/mail/compose" class="btn-hb-primary btn-add-Mail">
-                <i class="bi bi-plus-circle"></i> بريد جديد
-            </a>
+            @if (_canCompose)
+            {
+                <a href="/mail/compose" class="btn-hb-primary btn-add-Mail">
+                    <i class="bi bi-plus-circle"></i> بريد جديد
+                </a>
+            }
         </div>
     </div>
 
@@ -312,6 +315,7 @@
     private List<HBMail.Domain.Entities.Mail> _Mails = [];
     private HashSet<Guid> _ccMailIds = [];
     private bool _loading = true;
+    private bool _canCompose;
     private string _searchTerm = "";
     private string _statusFilter = "";
     private string _typeFilter = "";
@@ -340,6 +344,15 @@
     {
         if (!string.IsNullOrEmpty(SuccessFromQuery))
             _successMessage = SuccessFromQuery;
+
+        // Only admin affairs (DEP-ADM) or SuperAdmin/ITAdmin can compose
+        var composeRoles = new[] { "SuperAdmin", "ITAdmin" };
+        _canCompose = composeRoles.Any(r => CurrentUser.IsInRole(r));
+        if (!_canCompose && CurrentUser.DepartmentId.HasValue)
+        {
+            _canCompose = await DbContext.Departments.AsNoTracking()
+                .AnyAsync(d => d.Id == CurrentUser.DepartmentId.Value && d.Code == "DEP-ADM");
+        }
 
         await LoadMails();
     }

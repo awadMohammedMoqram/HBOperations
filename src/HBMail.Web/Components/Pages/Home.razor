@@ -224,11 +224,14 @@
         <div class="container">
             <h2 class="hb-section-title">إجراءات سريعة</h2>
             <div class="actions-grid">
-                <a href="/mail/compose" class="action-card">
-                    <div class="action-icon action-icon-primary"><i class="bi bi-plus-circle-fill"></i></div>
-                    <h3>إرسال بريد</h3>
-                    <p>إنشاء بريد جديد</p>
-                </a>
+                @if (_canCompose)
+                {
+                    <a href="/mail/compose" class="action-card">
+                        <div class="action-icon action-icon-primary"><i class="bi bi-plus-circle-fill"></i></div>
+                        <h3>إرسال بريد</h3>
+                        <p>إنشاء بريد جديد</p>
+                    </a>
+                }
                 <a href="/mail" class="action-card">
                     <div class="action-icon action-icon-gold"><i class="bi bi-envelope-fill"></i></div>
                     <h3>صندوق البريد</h3>
@@ -278,6 +281,7 @@
     private Dictionary<MailType, int> _typeBreakdown = [];
     private Dictionary<string, int> _weeklyData = [];
     private List<HBMail.Domain.Entities.Mail> _recentMails = [];
+    private bool _canCompose;
 
     protected override async Task OnInitializedAsync()
     {
@@ -285,6 +289,14 @@
 
         var globalRoles = new[] { "SuperAdmin", "CEO", "ITAdmin" };
         var hasGlobalAccess = globalRoles.Any(r => CurrentUser.IsInRole(r));
+
+        // Only admin affairs (DEP-ADM) or SuperAdmin/ITAdmin can compose
+        _canCompose = hasGlobalAccess;
+        if (!_canCompose && CurrentUser.DepartmentId.HasValue)
+        {
+            _canCompose = await DbContext.Departments.AsNoTracking()
+                .AnyAsync(d => d.Id == CurrentUser.DepartmentId.Value && d.Code == "DEP-ADM");
+        }
 
         IQueryable<HBMail.Domain.Entities.Mail> Mails = DbContext.Mails.AsNoTracking();
 
