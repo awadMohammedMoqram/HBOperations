@@ -1,4 +1,4 @@
-﻿using HBMail.Application.Common.DTOs;
+using HBMail.Application.Common.DTOs;
 using HBMail.Domain.Enums;
 using QuestPDF.Drawing;
 using QuestPDF.Fluent;
@@ -639,7 +639,7 @@ public class PdfReportService
                             var bg = i % 2 == 0 ? White : LightBg;
                             DataCell(table, r.ReferenceNumber, bg, bold: true, color: Primary);
                             DataCell(table, Truncate(r.Subject, 60), bg, alignRight: true);
-                            DataCell(table, GetTypeName(r.Type), bg);
+
                             StatusBadgeCell(table, r.Status, bg);
                             DataCell(table, r.SenderName ?? "—", bg, alignRight: true);
                             DataCell(table, r.ReceiverName ?? "—", bg, alignRight: true);
@@ -713,7 +713,7 @@ public class PdfReportService
                             DataCell(table, (i + 1).ToString(), bg, color: Gray);
                             DataCell(table, r.ReferenceNumber, bg, bold: true, color: Primary);
                             DataCell(table, Truncate(r.Subject, 70), bg, alignRight: true);
-                            DataCell(table, GetTypeName(r.Type), bg);
+
                             DataCell(table, r.Direction, bg, color: r.Direction == "صادرة" ? Info : Success);
                             DataCell(table, r.CounterpartName ?? "—", bg, alignRight: true);
                             StatusBadgeCell(table, r.Status, bg);
@@ -804,7 +804,7 @@ public class PdfReportService
             {
                 ComposeSection(col, "توزيع الرفض حسب نوع البريد", section =>
                 {
-                    section.Item().Element(c => BuildRejectionGroupTable(c, "نوع البريد", byType));
+                    section.Item().Element(c => BuildRejectionGroupTable(c, byType));
                 });
             }
 
@@ -842,7 +842,7 @@ public class PdfReportService
                             var bg = i % 2 == 0 ? White : LightBg;
                             DataCell(table, r.ReferenceNumber, bg, bold: true, color: Primary);
                             DataCell(table, Truncate(r.Subject, 50), bg, alignRight: true);
-                            DataCell(table, GetTypeName(r.Type), bg);
+
                             DataCell(table, r.SenderBranch ?? "—", bg, alignRight: true);
                             DataCell(table, r.RejectedAt.ToString("yyyy/MM/dd"), bg, color: Gray);
                             DataCell(table, Truncate(r.RejectionNote, 90) ?? "بدون سبب", bg,
@@ -990,7 +990,7 @@ public class PdfReportService
                 c.RelativeColumn(3);
             });
 
-            TableHeader(table, ["#", "نوع البريد", "العدد", "النسبة", "التوزيع"]);
+            TableHeader(table, ["#", "العدد", "النسبة", "التوزيع"]);
 
             var maxCount = groups.Max(g => g.Count);
             for (int i = 0; i < groups.Count; i++)

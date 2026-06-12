@@ -1,3 +1,4 @@
+using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using HBMail.Application.Common.Interfaces;
@@ -21,11 +22,19 @@ public class AzureBlobStorageService : IFileStorageService
 
         var serviceClient = new BlobServiceClient(connectionString);
         _containerClient = serviceClient.GetBlobContainerClient(containerName);
-        _containerClient.CreateIfNotExists(PublicAccessType.None);
     }
 
     public async Task<FileUploadResult> UploadAsync(Stream stream, string fileName, string contentType, CancellationToken ct = default)
     {
+        try
+        {
+            await _containerClient.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: ct);
+        }
+        catch (RequestFailedException ex)
+        {
+            _logger.LogWarning(ex, "Failed to verify or create blob container: {Message}", ex.Message);
+        }
+
         var date = DateTime.UtcNow;
         var blobName = $"{date:yyyy}/{date:MM}/{Guid.NewGuid()}{Path.GetExtension(fileName)}";
 

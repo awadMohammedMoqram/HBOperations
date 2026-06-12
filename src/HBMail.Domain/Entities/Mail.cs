@@ -1,4 +1,4 @@
-﻿using HBMail.Domain.Common;
+using HBMail.Domain.Common;
 using HBMail.Domain.Enums;
 
 namespace HBMail.Domain.Entities;

@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Components.Forms
+﻿@using Microsoft.AspNetCore.Components.Forms
 @inject NavigationManager Navigation
 @inject IHttpContextAccessor HttpContextAccessor
 
@@ -18,7 +18,7 @@
     {
         <div class="upload-progress-area">
             <div class="upload-spinner"></div>
-            <p class="upload-status">جاري رفع الملفات... (@_uploadedCount / @_totalFiles)</p>
+            <p class="upload-status">Ø¬Ø§Ø±ÙŠ Ø±ÙØ¹ Ø§Ù„Ù…Ù„ÙØ§Øª... (@_uploadedCount / @_totalFiles)</p>
             <div class="progress-bar-container">
                 <div class="progress-bar-fill" style="width: @(_totalFiles > 0 ? (_uploadedCount * 100 / _totalFiles) : 0)%"></div>
             </div>
@@ -28,8 +28,8 @@
     {
         <label for="@_inputId" class="upload-label">
             <i class="bi bi-cloud-arrow-up"></i>
-            <span class="upload-text">اسحب ملفات PDF هنا أو <strong>اضغط للاختيار</strong></span>
-            <span class="upload-hint">PDF فقط — حتى 5 ملفات، بإجمالي 20 ميجابايت</span>
+            <span class="upload-text">Ø§Ø³Ø­Ø¨ Ù…Ù„ÙØ§Øª PDF Ù‡Ù†Ø§ Ø£Ùˆ <strong>Ø§Ø¶ØºØ· Ù„Ù„Ø§Ø®ØªÙŠØ§Ø±</strong></span>
+            <span class="upload-hint">PDF ÙÙ‚Ø· â€” Ø­ØªÙ‰ 5 Ù…Ù„ÙØ§ØªØŒ Ø¨Ø¥Ø¬Ù…Ø§Ù„ÙŠ 20 Ù…ÙŠØ¬Ø§Ø¨Ø§ÙŠØª</span>
         </label>
     }
 </div>
@@ -82,7 +82,7 @@
             {
                 if (uploadedBytes + file.Size > MaxTotalBytes)
                 {
-                    _errors.Add($"{file.Name}: تجاوز الحد الأقصى للحجم الإجمالي (20 ميجا)");
+                    _errors.Add($"{file.Name}: ØªØ¬Ø§ÙˆØ² Ø§Ù„Ø­Ø¯ Ø§Ù„Ø£Ù‚ØµÙ‰ Ù„Ù„Ø­Ø¬Ù… Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ (20 Ù…ÙŠØ¬Ø§)");
                     _uploadedCount++;
                     StateHasChanged();
                     continue;
@@ -90,7 +90,7 @@
 
                 if (file.Size > MaxFileSize)
                 {
-                    _errors.Add($"{file.Name}: حجم الملف يتجاوز 20 ميجابايت");
+                    _errors.Add($"{file.Name}: Ø­Ø¬Ù… Ø§Ù„Ù…Ù„Ù ÙŠØªØ¬Ø§ÙˆØ² 20 Ù…ÙŠØ¬Ø§Ø¨Ø§ÙŠØª");
                     _uploadedCount++;
                     StateHasChanged();
                     continue;
@@ -98,7 +98,7 @@
 
                 if (file.ContentType != "application/pdf")
                 {
-                    _errors.Add($"{file.Name}: نوع الملف غير مسموح (PDF فقط)");
+                    _errors.Add($"{file.Name}: Ù†ÙˆØ¹ Ø§Ù„Ù…Ù„Ù ØºÙŠØ± Ù…Ø³Ù…ÙˆØ­ (PDF ÙÙ‚Ø·)");
                     _uploadedCount++;
                     StateHasChanged();
                     continue;
@@ -134,7 +134,7 @@
             }
             catch (Exception ex)
             {
-                _errors.Add($"{file.Name}: خطأ في الرفع - {ex.Message}");
+                _errors.Add($"{file.Name}: Ø®Ø·Ø£ ÙÙŠ Ø§Ù„Ø±ÙØ¹ - {ex.Message}");
             }
 
             _uploadedCount++;
@@ -150,3 +150,4 @@
         }
     }
 }
+

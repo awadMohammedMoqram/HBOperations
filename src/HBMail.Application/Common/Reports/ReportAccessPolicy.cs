@@ -1,4 +1,4 @@
-﻿using HBMail.Application.Common.Interfaces;
+using HBMail.Application.Common.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace HBMail.Application.Common.Reports;

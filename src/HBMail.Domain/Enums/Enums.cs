@@ -1,4 +1,4 @@
-﻿namespace HBMail.Domain.Enums;
+namespace HBMail.Domain.Enums;
 
 /// <summary>
 /// مسار سير العمل (نظام البريد الداخلي):

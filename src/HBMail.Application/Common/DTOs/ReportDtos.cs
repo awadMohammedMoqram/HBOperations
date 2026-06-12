@@ -1,4 +1,4 @@
-﻿using HBMail.Domain.Enums;
+using HBMail.Domain.Enums;
 
 namespace HBMail.Application.Common.DTOs;
 

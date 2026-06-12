@@ -1,21 +1,21 @@
-@page "/login"
+﻿@page "/login"
 @layout EmptyLayout
 @using Microsoft.AspNetCore.Identity
 @using HBMail.Infrastructure.Identity
 @inject SignInManager<ApplicationUser> SignInManager
 @inject NavigationManager Navigation
 
-<PageTitle>تسجيل دخول الإدارة - بنك حضرموت</PageTitle>
+<PageTitle>ØªØ³Ø¬ÙŠÙ„ Ø¯Ø®ÙˆÙ„ Ø§Ù„Ø¥Ø¯Ø§Ø±Ø© - Ø¨Ù†Ùƒ Ø­Ø¶Ø±Ù…ÙˆØª</PageTitle>
 
 <div class="admin-login-page" dir="rtl">
     <div class="login-container">
         <div class="login-card">
             <div class="login-header">
                 <div class="login-logo">
-                    <img src="Images/aboutLogo-fDwVp-So.svg" alt="بنك حضرموت" />
+                    <img src="Images/aboutLogo-fDwVp-So.svg" alt="Ø¨Ù†Ùƒ Ø­Ø¶Ø±Ù…ÙˆØª" />
                 </div>
-                <h1 class="login-title">نظام البريد الداخلي</h1>
-                <p class="login-subtitle">الرجاء إدخال بيانات الدخول للمتابعة</p>
+                <h1 class="login-title">Ù†Ø¸Ø§Ù… Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¯Ø§Ø®Ù„ÙŠ</h1>
+                <p class="login-subtitle">Ø§Ù„Ø±Ø¬Ø§Ø¡ Ø¥Ø¯Ø®Ø§Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¯Ø®ÙˆÙ„ Ù„Ù„Ù…ØªØ§Ø¨Ø¹Ø©</p>
             </div>
 
             @if (!string.IsNullOrEmpty(_errorMessage))
@@ -30,35 +30,35 @@
                 <div class="form-group">
                     <label class="form-label">
                         <i class="bi bi-person-fill"></i>
-                        اسم المستخدم
+                        Ø§Ø³Ù… Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…
                     </label>
-                    <InputText @bind-Value="_model.Username" class="form-control" placeholder="أدخل اسم المستخدم" autocomplete="username" />
+                    <InputText @bind-Value="_model.Username" class="form-control" placeholder="Ø£Ø¯Ø®Ù„ Ø§Ø³Ù… Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…" autocomplete="username" />
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">
                         <i class="bi bi-lock-fill"></i>
-                        كلمة المرور
+                        ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ±
                     </label>
-                    <InputText @bind-Value="_model.Password" type="password" class="form-control" placeholder="••••••••" autocomplete="current-password" />
+                    <InputText @bind-Value="_model.Password" type="password" class="form-control" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" autocomplete="current-password" />
                 </div>
 
                 <div class="form-group remember-group">
                     <label class="remember-label">
                         <input type="checkbox" @bind="_model.RememberMe" style="width:14px;height:14px;accent-color:#003d7a;cursor:pointer;margin:0;transform:scale(0.85);" />
-                        <span>تذكرني</span>
+                        <span>ØªØ°ÙƒØ±Ù†ÙŠ</span>
                     </label>
                 </div>
 
                 <button type="submit" class="btn-login" disabled="@_isLoading">
                     @if (_isLoading)
                     {
-                        <span>جاري تسجيل الدخول...</span>
+                        <span>Ø¬Ø§Ø±ÙŠ ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„...</span>
                     }
                     else
                     {
                         <i class="bi bi-box-arrow-in-right"></i>
-                        <span>تسجيل الدخول</span>
+                        <span>ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„</span>
                     }
                 </button>
             </EditForm>
@@ -66,9 +66,9 @@
             <div class="login-footer">
                 <p class="footer-text">
                     <i class="bi bi-shield-check"></i>
-                    جميع البيانات محمية ومشفرة
+                    Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ù…Ø­Ù…ÙŠØ© ÙˆÙ…Ø´ÙØ±Ø©
                 </p>
-                <p class="footer-copyright">© @DateTime.Now.Year بنك حضرموت - جميع الحقوق محفوظة</p>
+                <p class="footer-copyright">Â© @DateTime.Now.Year Ø¨Ù†Ùƒ Ø­Ø¶Ø±Ù…ÙˆØª - Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø­Ù‚ÙˆÙ‚ Ù…Ø­ÙÙˆØ¸Ø©</p>
             </div>
         </div>
     </div>
@@ -111,7 +111,7 @@
 
         if (result.IsLockedOut)
         {
-            _errorMessage = "تم قفل الحساب مؤقتاً بسبب محاولات تسجيل دخول متعددة. حاول مرة أخرى بعد 15 دقيقة.";
+            _errorMessage = "ØªÙ… Ù‚ÙÙ„ Ø§Ù„Ø­Ø³Ø§Ø¨ Ù…Ø¤Ù‚ØªØ§Ù‹ Ø¨Ø³Ø¨Ø¨ Ù…Ø­Ø§ÙˆÙ„Ø§Øª ØªØ³Ø¬ÙŠÙ„ Ø¯Ø®ÙˆÙ„ Ù…ØªØ¹Ø¯Ø¯Ø©. Ø­Ø§ÙˆÙ„ Ù…Ø±Ø© Ø£Ø®Ø±Ù‰ Ø¨Ø¹Ø¯ 15 Ø¯Ù‚ÙŠÙ‚Ø©.";
         }
         else if (result.RequiresTwoFactor)
         {
@@ -120,7 +120,7 @@
         }
         else
         {
-            _errorMessage = "اسم المستخدم أو كلمة المرور غير صحيحة.";
+            _errorMessage = "Ø§Ø³Ù… Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø£Ùˆ ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± ØºÙŠØ± ØµØ­ÙŠØ­Ø©.";
         }
 
         _isLoading = false;
@@ -133,3 +133,4 @@
         public bool RememberMe { get; set; }
     }
 }
+

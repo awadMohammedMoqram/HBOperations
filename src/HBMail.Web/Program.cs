@@ -1,4 +1,4 @@
-﻿using HBMail.Application;
+using HBMail.Application;
 using HBMail.Application.Common.DTOs;
 using HBMail.Application.Common.Interfaces;
 using HBMail.Application.Common.Reports;
